@@ -16,6 +16,10 @@ const matchSchema = new Schema({
             required:true
         }
     },
+    age: {
+        minAge: {type:Number,default:18,min:0,max:100},
+        maxAge: {type:Number,default:60,min:0,max:100}
+    },
 
     host: {type:Schema.Types.ObjectId, ref:'User', required: true },
 
@@ -44,3 +48,9 @@ const matchSchema = new Schema({
 //so first would be search based on location,second would be search based on sports and datetime 
 // another might be
 
+matchSchema.index({ location: '2dsphere' });
+matchSchema.index({ host: 1 });
+matchSchema.index({ sport: 1, gender: 1, datetime: 1 });
+matchSchema.index({ sport: 1, minAge: 1, maxAge: 1, datetime: 1 });
+
+module.exports = mongoose.model('Match', matchSchema);
