@@ -51,6 +51,6 @@ const matchSchema = new Schema({
 matchSchema.index({ location: '2dsphere' });
 matchSchema.index({ host: 1 });
 matchSchema.index({ sport: 1, gender: 1, datetime: 1 });
-matchSchema.index({ sport: 1, minAge: 1, maxAge: 1, datetime: 1 });
+matchSchema.index({ sport: 1, 'age.minAge': 1, 'age.maxAge': 1, datetime: 1 });
 
 module.exports = mongoose.model('Match', matchSchema);

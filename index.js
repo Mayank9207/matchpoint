@@ -26,7 +26,7 @@ app.use((req, res, next) => {
 
 // Routes (you’ll create these soon)
 app.use('/api/auth', require('./routes/auth'));
-// Later: app.use('/api/matches', require('./routes/matches'));
+app.use('/api/matches', require('./routes/match'));
 
 // Health check route
 app.get('/', (req, res) => {
@@ -48,17 +48,11 @@ app.use((err, req, res, next) => {
 const PORT = process.env.PORT || 5000;
 
 connectdb().then(() => {
-    
-    // Only start the server if the DB connection is successful
-
-
-    // ... your app.use() routes ...
-    
-    const PORT = process.env.PORT || 5000;
-    console.log('Connected to DB ✅');
-    app.listen(PORT, () => {
-        console.log(`Server running successfully on port ${PORT}`);
-    });
+  // Only start the server if the DB connection is successful
+  console.log('Connected to DB ✅');
+  app.listen(PORT, () => {
+    console.log(`Server running successfully on port ${PORT}`);
+  });
 
 }).catch(err => {
     // If connection fails, log the error and exit
