@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import api from "../api/client";
 import { Input } from "../components/ui/input";
 import { Button } from "../components/ui/button";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import {
   Select,
   SelectContent,
@@ -14,14 +14,12 @@ import { Search } from "lucide-react";
 import { Card, CardContent } from "../components/ui/card";
 import { 
   Circle,
-  Gamepad2,
-  Target,
-  Trophy,
   Users,
   MapPin,
   Calendar,
   Clock
 } from "lucide-react";
+import useGoogleMaps from "../hooks/useGoogleMaps";
 
 const sports = [
   "All Sports",
@@ -35,6 +33,15 @@ const sports = [
   "Hockey",
   "Rugby",
   "Golf",
+];
+
+const distanceOptions = [
+  { label: "Any distance", value: "any" },
+  { label: "Within 2 km", value: "2" },
+  { label: "Within 5 km", value: "5" },
+  { label: "Within 10 km", value: "10" },
+  { label: "Within 25 km", value: "25" },
+  { label: "Within 50 km", value: "50" },
 ];
 
 // Sport icon mapping - using only basic Lucide icons that definitely exist
@@ -53,207 +60,356 @@ const sportIcons = {
 };
 
 export default function MatchesPage() {
+  const navigate = useNavigate();
+  const {
+    googleReady,
+    loadError: mapsError,
+    geocodeText,
+    reverseGeocode,
+  } = useGoogleMaps({ loader: { language: "en" } });
   const [matches, setMatches] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedSport, setSelectedSport] = useState("All Sports");
+  const [distanceFilter, setDistanceFilter] = useState("any");
+  const [userLocation, setUserLocation] = useState(() => {
+    if (typeof window === "undefined") return null;
+    try {
+      const saved = JSON.parse(localStorage.getItem("user_location") || "null");
+      if (saved && Number.isFinite(saved.lat) && Number.isFinite(saved.lng)) {
+        return { lat: saved.lat, lng: saved.lng };
+      }
+    } catch (err) {
+      console.error("Failed to read saved location:", err);
+    }
+    return null;
+  });
+  const [locationStatus, setLocationStatus] = useState("idle");
+  const [locationError, setLocationError] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [locationSearch, setLocationSearch] = useState("");
+  const [resolvingLocation, setResolvingLocation] = useState(false);
+  const [resolvedAddresses, setResolvedAddresses] = useState({});
 
-  useEffect(() => {
-    const fetchMatches = async () => {
-      try {
-        setLoading(true);
-        const res = await api.get("/matches");
-        const matchesData = res.data?.data || [];
+  const [currentUserId, setCurrentUserId] = useState(null);
 
-        // Add isJoined status based on current user's participation
-        const matchesWithJoinStatus = matchesData.map((match) => {
-          const currentUser = JSON.parse(localStorage.getItem("user") || "{}");
-          const userId = currentUser?.id || currentUser?._id;
-          
-          console.log(`Processing match ${match._id || match.id}:`, {
-            sport: match.sport,
-            fullMatch: match,
-            participants: match.participants,
-            userId: userId,
-            participantIds: match.participants?.map(p => ({ userId: p.userId, id: p.id }))
-          });
-          
-          // TEMPORARY FIX: Check if user has joined this match in localStorage
-          // This simulates the backend functionality until backend is fixed
-          const joinedMatches = JSON.parse(localStorage.getItem("joinedMatches") || "[]");
-          const isJoined = joinedMatches.includes(match._id || match.id) || 
-                         match.participants?.some((p) => p.userId === userId || p.id === userId) || false;
-          
-          console.log(`  Checking localStorage joinedMatches:`, joinedMatches);
-          console.log(`  Match ID ${match._id || match.id} in joinedMatches:`, joinedMatches.includes(match._id || match.id));
-          console.log(`  Final isJoined for match ${match._id || match.id}:`, isJoined);
-          
-          return {
-            ...match,
-            isJoined,
-            currentParticipants: match.participants?.length || match.currentParticipants || 0,
-          };
-        });
-
-        setMatches(matchesWithJoinStatus);
-        setError(null);
-      } catch (err) {
-        console.error("Failed to fetch matches:", err);
-        setError("Failed to fetch matches");
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchMatches();
+  const fallbackUserId = useCallback(() => {
+    try {
+      const user = JSON.parse(localStorage.getItem("user") || "null");
+      return user?.id || user?._id || null;
+    } catch (err) {
+      console.error("Error getting user ID from storage:", err);
+      return null;
+    }
   }, []);
 
-  // Helper function to get current user ID
-  const getCurrentUserId = () => {
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadMe() {
+      try {
+        const res = await api.get("/auth/me");
+        const user = res.data?.data?.user || res.data?.user;
+        if (!cancelled) {
+          setCurrentUserId(user?._id || user?.id || null);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setCurrentUserId(fallbackUserId());
+        }
+      }
+    }
+
+    loadMe();
+    return () => {
+      cancelled = true;
+    };
+  }, [fallbackUserId]);
+
+  const requestLocation = () => {
+    if (typeof navigator === "undefined" || !navigator.geolocation) {
+      setLocationStatus("unsupported");
+      setLocationError("Geolocation is not supported in this browser.");
+      return;
+    }
+
+    setLocationStatus("loading");
+    setLocationError("");
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const nextLocation = {
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+        };
+        setUserLocation(nextLocation);
+        setLocationStatus("granted");
+        try {
+          localStorage.setItem(
+            "user_location",
+            JSON.stringify({ ...nextLocation, savedAt: Date.now() })
+          );
+        } catch (err) {
+          console.error("Failed to persist location:", err);
+        }
+      },
+      (err) => {
+        console.error("Location error:", err);
+        setLocationStatus("denied");
+        setLocationError(err.message || "Location permission was denied.");
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 300000,
+      }
+    );
+  };
+
+  const haversineKm = (from, to) => {
+    if (!from || !to) return null;
+    const toRad = (value) => (value * Math.PI) / 180;
+    const earthRadiusKm = 6371;
+    const dLat = toRad(to.lat - from.lat);
+    const dLng = toRad(to.lng - from.lng);
+    const lat1 = toRad(from.lat);
+    const lat2 = toRad(to.lat);
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(lat1) * Math.cos(lat2) *
+      Math.sin(dLng / 2) * Math.sin(dLng / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return earthRadiusKm * c;
+  };
+
+  const formatDistance = (km) => {
+    if (!Number.isFinite(km)) return null;
+    if (km < 1) return `${Math.round(km * 1000)} m`;
+    return `${km.toFixed(1)} km`;
+  };
+
+  const getLocationLabel = (match) => {
+    const matchId = match._id || match.id;
+    if (matchId && resolvedAddresses[matchId]) return resolvedAddresses[matchId];
+    if (typeof match.location === "string") {
+      return match.location;
+    }
+    if (match.locationDetails) {
+      const { address, locality, city, state, pincode } = match.locationDetails;
+      const parts = [address, locality, city, state, pincode].filter(Boolean);
+      if (parts.length > 0) return parts.join(", ");
+    }
+    const coords = match.location?.coordinates;
+    if (Array.isArray(coords) && coords.length === 2) {
+      const lat = coords[1];
+      const lng = coords[0];
+      if (Number.isFinite(lat) && Number.isFinite(lng)) {
+        return `Lat ${lat.toFixed(3)}, Lng ${lng.toFixed(3)}`;
+      }
+    }
+    return "";
+  };
+
+  const getMatchDistanceKm = (match) => {
+    if (Number.isFinite(match.distanceKm)) {
+      return match.distanceKm;
+    }
+    if (!userLocation) return null;
+    const coords = match.location?.coordinates;
+    if (!Array.isArray(coords) || coords.length !== 2) return null;
+    const lat = coords[1];
+    const lng = coords[0];
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+    return haversineKm(userLocation, { lat, lng });
+  };
+
+  const fetchMatches = useCallback(async () => {
     try {
-      const user = JSON.parse(localStorage.getItem("user") || "{}");
-      const userId = user.id || user._id;
-      console.log("Current user from localStorage:", user);
-      console.log("Extracted user ID:", userId);
-      console.log("User object keys:", Object.keys(user));
-      console.log("User.id:", user.id);
-      console.log("User._id:", user._id);
-      return userId;
+      setLoading(true);
+      const params = new URLSearchParams();
+      const shouldUseGeo = userLocation && distanceFilter !== "any";
+
+      if (selectedSport && selectedSport !== "All Sports") {
+        params.set("sport", selectedSport.toLowerCase());
+      }
+
+      if (shouldUseGeo) {
+        params.set("lat", userLocation.lat);
+        params.set("lng", userLocation.lng);
+        params.set("radius", distanceFilter);
+        params.set("sort", "distance");
+      }
+
+      const query = params.toString();
+      const url = query ? `/matches?${query}` : "/matches";
+      const res = await api.get(url);
+      const matchesData = res.data?.data || [];
+      const userId = currentUserId;
+
+      const matchesWithJoinStatus = matchesData.map((match) => {
+        const participantIds = match.participants?.map(
+          (p) => p.user?._id || p.user
+        );
+        const isJoined =
+          userId && participantIds?.some((id) => String(id) === String(userId));
+
+        return {
+          ...match,
+          isJoined: Boolean(isJoined),
+          currentParticipants:
+            match.participants?.length ?? match.currentParticipants ?? 0,
+        };
+      });
+
+      setMatches(matchesWithJoinStatus);
+      setError(null);
     } catch (err) {
-      console.error("Error getting user ID:", err);
-      return null;
+      console.error("Failed to fetch matches:", err);
+      setError("Failed to fetch matches");
+    } finally {
+      setLoading(false);
+    }
+  }, [selectedSport, distanceFilter, userLocation, currentUserId]);
+
+  useEffect(() => {
+    fetchMatches();
+  }, [fetchMatches]);
+
+  useEffect(() => {
+    if (distanceFilter === "any") return;
+    if (userLocation || locationStatus === "loading") return;
+    requestLocation();
+  }, [distanceFilter, userLocation, locationStatus]);
+
+  // Reverse geocode matches lacking human-readable locations
+  useEffect(() => {
+    if (!googleReady) return;
+    const pending = matches.filter((m) => {
+      const id = m._id || m.id;
+      const coords = m.location?.coordinates;
+      return (
+        id &&
+        Array.isArray(coords) &&
+        coords.length === 2 &&
+        !resolvedAddresses[id] &&
+        !m.locationDetails?.address &&
+        !m.locationDetails?.city
+      );
+    });
+
+    pending.forEach(async (match) => {
+      const id = match._id || match.id;
+      const coords = match.location.coordinates;
+      try {
+        const res = await reverseGeocode({ lat: coords[1], lng: coords[0] });
+        if (res?.formattedAddress) {
+          setResolvedAddresses((prev) => ({ ...prev, [id]: res.formattedAddress }));
+        }
+      } catch (err) {
+        console.error("Reverse geocode failed for match", id, err);
+      }
+    });
+  }, [matches, resolvedAddresses, reverseGeocode, googleReady]);
+
+  const resolveLocationFromText = async () => {
+    if (!locationSearch?.trim()) return;
+    try {
+      setResolvingLocation(true);
+      const res = await geocodeText(locationSearch.trim());
+      if (!res) {
+        setLocationError("Could not resolve that place. Try a more specific query.");
+        return;
+      }
+      const next = { lat: res.lat, lng: res.lng };
+      setUserLocation(next);
+      setLocationStatus("manual");
+      setLocationError("");
+      localStorage.setItem(
+        "user_location",
+        JSON.stringify({ ...next, savedAt: Date.now(), source: "manual" })
+      );
+    } catch (err) {
+      console.error("Manual location resolve failed:", err);
+      setLocationError("Manual location lookup failed.");
+    } finally {
+      setResolvingLocation(false);
     }
   };
 
   const handleToggleJoin = async (id) => {
-    console.log("Toggle join called for match ID:", id);
-    console.log("Type of match ID:", typeof id);
-
     if (!id || id === "undefined" || id === undefined) {
-      console.error("Invalid match ID detected:", id);
       alert("Invalid match ID. Please refresh the page.");
       return;
     }
 
-    const currentUserId = getCurrentUserId();
-    console.log("Final user ID being used:", currentUserId);
-    console.log("Type of user ID:", typeof currentUserId);
-
     if (!currentUserId || currentUserId === "undefined" || currentUserId === undefined) {
-      console.error("Invalid user ID detected:", currentUserId);
       alert("User not logged in. Please log in again.");
       return;
     }
 
     try {
       const match = matches.find((m) => (m.id === id || m._id === id));
-      console.log("Found match:", match);
-
-      // Also log all matches for debugging
-      console.log("All available matches:", matches.map((m) => ({ id: m.id, _id: m._id, sport: m.sport })));
-
       if (!match) {
-        console.error("Match not found for ID:", id);
         alert("Match not found. Please refresh the page.");
         return;
       }
 
       const isJoining = !match.isJoined;
 
-      console.log("Match", id, "isJoining:", isJoining);
-      console.log("User ID:", currentUserId);
-      console.log("API endpoint:", `/matches/${id}/join`);
-
-      // Make API call to backend
       if (isJoining) {
         await api.post(`/matches/${id}/join`);
-        // TEMPORARY FIX: Store joined match in localStorage
-        const joinedMatches = JSON.parse(localStorage.getItem("joinedMatches") || "[]");
-        if (!joinedMatches.includes(id)) {
-          joinedMatches.push(id);
-          localStorage.setItem("joinedMatches", JSON.stringify(joinedMatches));
-          console.log("Added to joinedMatches:", joinedMatches);
-        }
       } else {
         await api.post(`/matches/${id}/leave`);
-        // TEMPORARY FIX: Remove from localStorage
-        const joinedMatches = JSON.parse(localStorage.getItem("joinedMatches") || "[]");
-        const updatedJoined = joinedMatches.filter(matchId => matchId !== id);
-        localStorage.setItem("joinedMatches", JSON.stringify(updatedJoined));
-        console.log("Removed from joinedMatches:", updatedJoined);
       }
 
-      // Force a re-fetch of matches to update the UI
-      setTimeout(() => {
-        window.location.reload();
-      }, 500);
-
-      // Update local state after successful API call
-      setMatches((prev) => {
-        const updated = prev.map((m) => {
-          if ((m.id === id || m._id === id)) {
-            return {
-              ...m,
-              isJoined: isJoining,
-              currentParticipants: isJoining
-                ? typeof m.currentParticipants === "number"
-                  ? m.currentParticipants + 1
-                  : 1
-                : typeof m.currentParticipants === "number"
-                ? Math.max(0, m.currentParticipants - 1)
-                : 0,
-            };
-          }
-          return m;
-        });
-        console.log("Updated matches:", updated);
-        return updated;
-      });
+      await fetchMatches();
     } catch (err) {
       console.error("Failed to toggle join status:", err);
-      console.error("Error response:", err.response?.data);
-      console.error("Request that failed:", {
-        matchId: id,
-        userId: currentUserId,
-        endpoint: `/matches/${id}/join`
-      });
       alert(err.response?.data?.error || "Failed to update match status. Please try again.");
     }
   };
 
   const filteredMatches = matches.filter((match) => {
     const sportStr = typeof match.sport === "string" ? match.sport.toLowerCase() : "";
-    const locationStr = typeof match.location === "string" ? match.location.toLowerCase() : "";
+    const titleStr = typeof match.title === "string" ? match.title.toLowerCase() : "";
+    const locationLabel = getLocationLabel(match);
+    const locationStr = locationLabel ? locationLabel.toLowerCase() : "";
     const selectedSportLower = selectedSport.toLowerCase();
+    const query = searchQuery.toLowerCase();
 
     const matchesSearch =
-      sportStr.includes(searchQuery.toLowerCase()) ||
-      locationStr.includes(searchQuery.toLowerCase());
+      sportStr.includes(query) ||
+      titleStr.includes(query) ||
+      locationStr.includes(query);
     const matchesSport =
       selectedSportLower === "all sports" || sportStr === selectedSportLower;
 
-    console.log("Filtering match", match.id, {
-      sportStr,
-      selectedSportLower,
-      matchesSport,
-      matchesSearch,
-    });
-
     return matchesSearch && matchesSport;
   });
+
+  const distanceLimitKm =
+    distanceFilter !== "any" && userLocation ? Number(distanceFilter) : null;
+
+  const matchesForRender = filteredMatches
+    .map((match) => ({
+      ...match,
+      _distanceKm: getMatchDistanceKm(match),
+    }))
+    .filter((match) => {
+      if (!Number.isFinite(distanceLimitKm)) return true;
+      return Number.isFinite(match._distanceKm) && match._distanceKm <= distanceLimitKm;
+    })
+    .sort((a, b) => {
+      if (!Number.isFinite(distanceLimitKm)) return 0;
+      if (!Number.isFinite(a._distanceKm) || !Number.isFinite(b._distanceKm)) return 0;
+      return a._distanceKm - b._distanceKm;
+    });
 
   const joinedCount = matches.filter((m) => m.isJoined).length;
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-        {/* Debug Info */}
-        <div className="mb-4 p-2 bg-red-900/20 border border-red-500/30 rounded text-xs">
-          Debug: Loading: {loading.toString()} | Error: {error || 'None'} | Matches: {matches.length} | 
-          Selected Sport: {selectedSport} | Search: '{searchQuery}' | Joined Count: {joinedCount} | 
-          User ID: {getCurrentUserId() || 'Not found'}
-        </div>
-
+      <main className="w-full px-4 py-8 sm:px-6 lg:px-8">
         <div className="mb-8">
           <h1 className="text-3xl font-bold tracking-tight text-foreground">
             Matches
@@ -263,55 +419,113 @@ export default function MatchesPage() {
           </p>
         </div>
 
-        <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex flex-1 flex-col gap-3 sm:flex-row sm:items-center">
-            <div className="relative flex-1 sm:max-w-xs">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                placeholder="Search matches..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9"
-              />
+        <div className="mb-6 space-y-3">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-1 flex-col gap-3 sm:flex-row sm:items-center">
+              <div className="relative flex-1 sm:max-w-xs">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  placeholder="Search matches..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-9"
+                />
+              </div>
+
+              <Select value={selectedSport} onValueChange={(value) => {
+                console.log("Sport filter changed to:", value);
+                setSelectedSport(value);
+              }}>
+                <SelectTrigger className="w-full sm:w-40">
+                  <SelectValue placeholder="Filter by sport" />
+                </SelectTrigger>
+                <SelectContent>
+                  {sports.map((sport) => (
+                    <SelectItem 
+                      key={sport} 
+                      value={sport}
+                      onClick={() => {
+                        console.log("Sport filter clicked:", sport);
+                        setSelectedSport(sport);
+                      }}
+                    >
+                      {sport}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Select value={distanceFilter} onValueChange={(value) => setDistanceFilter(value)}>
+                <SelectTrigger className="w-full sm:w-40">
+                  <SelectValue placeholder="Distance" />
+                </SelectTrigger>
+                <SelectContent>
+                  {distanceOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
-            <Select value={selectedSport} onValueChange={(value) => {
-              console.log("Sport filter changed to:", value);
-              setSelectedSport(value);
-            }}>
-              <SelectTrigger className="w-full sm:w-40">
-                <SelectValue placeholder="Filter by sport" />
-              </SelectTrigger>
-              <SelectContent>
-                {sports.map((sport) => (
-                  <SelectItem 
-                    key={sport} 
-                    value={sport}
-                    onClick={() => {
-                      console.log("Sport filter clicked:", sport);
-                      setSelectedSport(sport);
-                    }}
-                  >
-                    {sport}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div className="text-sm text-muted-foreground">
+                match{joinedCount !== 1 && "es"} joined
+              </div>
+
+              <Button
+                asChild
+                size="sm"
+                className="h-9 px-4"
+              >
+                <Link to="/create">Create Match</Link>
+              </Button>
+            </div>
           </div>
 
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div className="text-sm text-muted-foreground">
-              <span className="font-medium text-foreground">{joinedCount}</span>{" "}
-              match{joinedCount !== 1 && "es"} joined
-            </div>
-
+          <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+            <span className="inline-flex items-center gap-2 rounded-full border border-border bg-card/60 px-3 py-1">
+              <span className={`h-2 w-2 rounded-full ${userLocation ? "bg-primary" : "bg-muted-foreground"}`} />
+              {userLocation ? "Location enabled" : locationStatus === "loading" ? "Locating..." : "Location off"}
+            </span>
+            {distanceFilter !== "any" && !userLocation && (
+              <span className="text-destructive">Enable location to filter by distance.</span>
+            )}
+            {locationError && (
+              <span className="text-destructive">{locationError}</span>
+            )}
             <Button
-              asChild
+              type="button"
+              variant="outline"
               size="sm"
-              className="h-9 px-4"
+              className="h-7 px-3 text-xs"
+              onClick={requestLocation}
+              disabled={locationStatus === "loading"}
             >
-              <Link to="/create">Create Match</Link>
+              {userLocation ? "Update location" : "Use my location"}
             </Button>
+            <div className="flex items-center gap-2">
+              <Input
+                placeholder="Or type city/locality"
+                value={locationSearch}
+                onChange={(e) => setLocationSearch(e.target.value)}
+                className="h-7 w-44"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-7 px-3 text-xs"
+                onClick={resolveLocationFromText}
+                disabled={resolvingLocation || !googleReady}
+              >
+                {resolvingLocation ? "Resolving..." : "Set"}
+              </Button>
+            </div>
+            {mapsError && (
+              <span className="text-destructive">{mapsError}</span>
+            )}
           </div>
         </div>
 
@@ -329,108 +543,130 @@ export default function MatchesPage() {
               Retry
             </button>
           </div>
-        ) : filteredMatches.length === 0 ? (
+        ) : matchesForRender.length === 0 ? (
           <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-border py-16">
             <p className="text-lg font-medium text-foreground">
               No matches found
             </p>
             <p className="mt-1 text-sm text-muted-foreground">
-              Try adjusting your search or filter criteria
+              {distanceFilter !== "any" && !userLocation
+                ? "Enable location to filter by distance."
+                : "Try adjusting your search or filter criteria"}
             </p>
           </div>
         ) : (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {filteredMatches.map((match) => {
-              console.log("Rendering match:", match);
+          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {matchesForRender.map((match) => {
               const matchId = match.id || match._id;
-              console.log("Using match ID:", matchId, "from match:", match);
+              const distanceLabel = formatDistance(match._distanceKm);
+              const locationLabel = getLocationLabel(match);
 
               if (!matchId) {
-                console.error("Match has no ID:", match);
                 return null;
               }
 
               return (
-                <Card key={matchId} className="relative overflow-hidden transition-all hover:shadow-lg hover:shadow-primary/10">
+                <Card 
+                  key={matchId} 
+                  className="group relative overflow-hidden transition-all duration-200 hover:shadow-lg hover:shadow-primary/10 hover:-translate-y-1 cursor-pointer bg-card border-border"
+                >
                   <CardContent className="p-6">
-                    <div className="flex items-start justify-between mb-4">
-                      <div className="flex items-center gap-2">
-                        {(() => {
-                          const SportIcon = sportIcons[match.sport];
-                          return SportIcon ? (
-                            <SportIcon className="w-5 h-5 text-primary" />
-                          ) : (
-                            <Circle className="w-5 h-5 text-primary" />
-                          );
-                        })()}
-                        <h3 className="text-xl font-bold text-foreground capitalize">
-                          {typeof match.sport === 'string' ? match.sport : 'Unknown sport'}
-                        </h3>
-                      </div>
-                      <div className="text-right">
-                        <div className="text-2xl font-bold text-primary">
-                          {typeof match.currentParticipants === 'number' && typeof match.capacity === 'number' 
-                            ? `${match.currentParticipants}/${match.capacity}`
-                            : '0/0'
-                          }
+                    <div onClick={() => navigate(`/matches/${matchId}`)} className="block">
+                      {/* Sport Header */}
+                      <div className="flex items-start justify-between mb-4">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
+                            {(() => {
+                              const SportIcon = sportIcons[match.sport];
+                              return SportIcon ? (
+                                <SportIcon className="w-5 h-5 text-primary" />
+                              ) : (
+                                <Circle className="w-5 h-5 text-primary" />
+                              );
+                            })()}
+                          </div>
+                          <div>
+                            <h3 className="text-lg font-semibold text-foreground capitalize">
+                              {typeof match.sport === 'string' ? match.sport : 'Unknown sport'}
+                            </h3>
+                            <div className="text-sm text-muted-foreground">
+                              {match.age?.minAge || 18}-{match.age?.maxAge || 100} years
+                            </div>
+                          </div>
                         </div>
-                        <div className="text-xs text-muted-foreground">players</div>
+                        <div className="text-right">
+                          <div className="text-xl font-bold text-primary">
+                            {typeof match.currentParticipants === 'number' && typeof match.capacity === 'number' 
+                              ? `${match.currentParticipants}/${match.capacity}`
+                              : '0/0'
+                            }
+                          </div>
+                          <div className="text-xs text-muted-foreground">players</div>
+                        </div>
                       </div>
-                    </div>
 
-                    {match.datetime && (
-                      <p className="text-sm text-muted-foreground mb-4 flex items-center gap-1">
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                        </svg>
-                        {match.datetime && typeof match.datetime === 'string' 
-                          ? new Date(match.datetime).toLocaleString(undefined, {
+                      {/* Date & Time */}
+                      {match.datetime && (
+                        <div className="mb-4">
+                          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                            <Calendar className="w-4 h-4" />
+                            {new Date(match.datetime).toLocaleDateString(undefined, {
                               month: 'short',
                               day: 'numeric',
+                              year: 'numeric'
+                            })}
+                          </div>
+                          <div className="flex items-center gap-2 text-sm text-muted-foreground mt-1">
+                            <Clock className="w-4 h-4" />
+                            {new Date(match.datetime).toLocaleTimeString(undefined, {
                               hour: '2-digit',
-                              minute: '2-digit',
-                            })
-                          : 'Invalid date'
-                        }
-                      </p>
-                    )}
+                              minute: '2-digit'
+                            })}
+                          </div>
+                        </div>
+                      )}
 
+                      {(locationLabel || distanceLabel) && (
+                        <div className="flex items-center justify-between text-sm text-muted-foreground mb-4">
+                          <div className="flex min-w-0 items-center gap-2">
+                            <MapPin className="w-4 h-4" />
+                            <span className="truncate">
+                              {locationLabel || "Location not specified"}
+                            </span>
+                          </div>
+                          {distanceLabel && (
+                            <span className="rounded-full bg-primary/10 px-2 py-1 text-xs font-medium text-primary">
+                              {distanceLabel} away
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Join/Leave Button */}
                     <Button
-                      onClick={() => handleToggleJoin(matchId)}
-                      className={`w-full mt-4 ${
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleToggleJoin(matchId);
+                      }}
+                      className={`w-full transition-colors ${
                         match.isJoined
                           ? "bg-destructive hover:bg-destructive/90 text-destructive-foreground"
                           : "bg-primary hover:bg-primary/90 text-primary-foreground"
                       }`}
                     >
-                      {/* ALWAYS RENDER BOTH BUTTONS FOR DEBUGGING */}
                       {match.isJoined ? (
                         <>
-                          <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                          </svg>
+                          <Users className="w-4 h-4 mr-2" />
                           Leave Match
                         </>
                       ) : (
                         <>
-                          <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                          </svg>
+                          <Users className="w-4 h-4 mr-2" />
                           Join Match
                         </>
                       )}
                     </Button>
-                    
-                    {/* ALWAYS SHOW DEBUG INFO */}
-                    <div className="mt-2 p-2 bg-yellow-500/20 border border-yellow-500/50 rounded text-xs">
-                      <div className="font-bold text-yellow-300">BUTTON DEBUG:</div>
-                      <div>isJoined = {match.isJoined.toString()}</div>
-                      <div>User: {getCurrentUserId() || 'null'}</div>
-                      <div>JoinedMatches: {JSON.stringify(JSON.parse(localStorage.getItem("joinedMatches") || "[]"))}</div>
-                      <div>MatchID: {matchId}</div>
-                      <div>Button should show: {match.isJoined ? 'LEAVE' : 'JOIN'}</div>
-                      <div>Button color: {match.isJoined ? 'RED' : 'BLUE'}</div>
-                    </div>
                   </CardContent>
                 </Card>
               );
