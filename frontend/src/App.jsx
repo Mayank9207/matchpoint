@@ -8,6 +8,7 @@ import Profile from "./pages/Profile";
 import Navbar from "./components/Navbar";
 import ProtectedRoute from "./components/Protected_route";
 import CreateMatch from "./pages/CreateMatch";
+import MatchDetails from "./pages/MatchDetails";
 import api from "./api/client";
 
 
@@ -54,6 +55,14 @@ export default function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
         <Route path="/create" element={<ProtectedRoute><CreateMatch /></ProtectedRoute>} />
+        <Route 
+          path="/matches/:id" 
+          element={
+            <ProtectedRoute>
+              <MatchDetails />
+            </ProtectedRoute>
+          } 
+        />
         <Route
           path="/profile"
           element={

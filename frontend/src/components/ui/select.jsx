@@ -1,32 +1,72 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 
-export function Select({ children, className = "", ...props }) {
+export function Select({ children, className = "", value, onValueChange, ...props }) {
   const [isOpen, setIsOpen] = useState(false);
-  const [selectedValue, setSelectedValue] = useState(null);
+  const [internalValue, setInternalValue] = useState(value ?? null);
 
-  const handleTriggerClick = () => {
-    setIsOpen(!isOpen);
-  };
+  const childArray = React.Children.toArray(children);
+  const triggerChild = childArray.find(
+    (child) => React.isValidElement(child) && child.type === SelectTrigger
+  );
+  const contentChild = childArray.find(
+    (child) => React.isValidElement(child) && child.type === SelectContent
+  );
+  const items = React.Children.toArray(
+    contentChild?.props?.children ??
+      childArray.filter(
+        (child) => React.isValidElement(child) && child.type === SelectItem
+      )
+  );
 
-  const handleItemClick = (value) => {
-    setSelectedValue(value);
+  const selectedValue = value !== undefined ? value : internalValue;
+  const selectedLabel = useMemo(() => {
+    const match = items.find(
+      (child) =>
+        React.isValidElement(child) && child.props?.value === selectedValue
+    );
+    return React.isValidElement(match) ? match.props.children : selectedValue;
+  }, [items, selectedValue]);
+
+  const handleTriggerClick = () => setIsOpen((prev) => !prev);
+
+  const handleItemClick = (nextValue) => {
+    if (value === undefined) {
+      setInternalValue(nextValue);
+    }
+    if (onValueChange) {
+      onValueChange(nextValue);
+    }
     setIsOpen(false);
   };
 
   return (
     <div className={`relative ${className}`} {...props}>
-      <SelectTrigger onClick={handleTriggerClick}>
-        {selectedValue ? selectedValue : <SelectValue placeholder="Select an option" />}
-      </SelectTrigger>
+      {triggerChild ? (
+        React.cloneElement(triggerChild, {
+          onClick: handleTriggerClick,
+          selectedLabel,
+        })
+      ) : (
+        <SelectTrigger onClick={handleTriggerClick} selectedLabel={selectedLabel} />
+      )}
       {isOpen && (
-        <SelectContent>
-          {React.Children.map(children, (child) => {
-            if (React.isValidElement(child)) {
-              return React.cloneElement(child, {
-                onClick: () => handleItemClick(child.props.children),
-              });
-            }
-            return child;
+        <SelectContent className="flex flex-col">
+          {items.map((child) => {
+            if (!React.isValidElement(child)) return child;
+            const childValue = child.props?.value ?? child.props?.children;
+            const isSelected = childValue === selectedValue;
+            return React.cloneElement(child, {
+              onClick: () => {
+                if (typeof child.props?.onClick === "function") {
+                  child.props.onClick();
+                }
+                handleItemClick(childValue);
+              },
+              "data-selected": isSelected ? "true" : "false",
+              className: `${child.props?.className ?? ""} ${
+                isSelected ? "bg-accent text-accent-foreground" : ""
+              }`.trim(),
+            });
           })}
         </SelectContent>
       )}
@@ -34,14 +74,21 @@ export function Select({ children, className = "", ...props }) {
   );
 }
 
-export function SelectTrigger({ children, className = "", ...props }) {
+export function SelectTrigger({ children, className = "", selectedLabel, ...props }) {
+  const resolvedChildren = React.Children.map(children, (child) => {
+    if (React.isValidElement(child) && child.type === SelectValue) {
+      return React.cloneElement(child, { selectedLabel });
+    }
+    return child;
+  });
+
   return (
     <button
       type="button"
       className={`flex w-full items-center justify-between rounded-md border border-border bg-background px-3 py-2 text-left text-sm text-foreground shadow-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background ${className}`}
       {...props}
     >
-      {children}
+      {resolvedChildren ?? selectedLabel ?? <SelectValue placeholder="Select an option" />}
     </button>
   );
 }
@@ -69,10 +116,10 @@ export function SelectItem({ children, className = "", onClick, ...props }) {
   );
 }
 
-export function SelectValue({ placeholder, className = "", ...props }) {
+export function SelectValue({ placeholder = "Select an option", selectedLabel, className = "", ...props }) {
   return (
     <span className={`text-muted-foreground ${className}`} {...props}>
-      {placeholder}
+      {selectedLabel ?? placeholder}
     </span>
   );
 }

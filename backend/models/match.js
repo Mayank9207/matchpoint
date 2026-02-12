@@ -5,6 +5,13 @@ const matchSchema = new Schema({
     title: {type : String , trim :  true},
     sport: {type : String,required: true,trim : true},
     datetime: {type:Date, required : true},
+    locationDetails: {
+        address: {type: String, trim: true},
+        locality: {type: String, trim: true},
+        city: {type: String, trim: true},
+        state: {type: String, trim: true},
+        pincode: {type: String, trim: true}
+    },
     location: {
         type:{
             type : String,
@@ -25,13 +32,13 @@ const matchSchema = new Schema({
 
     participants: [
         {
-            user:{type:Schema.Types.ObjectId,ref:'User'},
+            user:{type:Schema.Types.ObjectId,ref:'User',required:true},
             joinedAt:{type:Date,default: ()=>new Date()}
         }
         
     ],
 
-    capacity:{type:Number,required:true,min:1,max:10},
+    capacity:{type:Number,required:true,min:2,max:22},
 
     gender:{type:String,enum:['any','male','female','mixed'],default:'any'},
 
@@ -39,7 +46,8 @@ const matchSchema = new Schema({
 
     description:{type:String,trim:true},
 
-    visibility:{type:String,enum:['public','private'],default:'private'}
+    visibility:{type:String,enum:['public','private'],default:'public'},
+    images:{type:[String],default:[]}
 },
 {timestamps:true});
 
@@ -49,6 +57,7 @@ const matchSchema = new Schema({
 // another might be
 
 matchSchema.index({ location: '2dsphere' });
+matchSchema.index({ 'locationDetails.city': 1, sport: 1 });
 matchSchema.index({ host: 1 });
 matchSchema.index({ sport: 1, gender: 1, datetime: 1 });
 matchSchema.index({ sport: 1, 'age.minAge': 1, 'age.maxAge': 1, datetime: 1 });
