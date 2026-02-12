@@ -12,7 +12,6 @@
   "dependencies": {
     "@googlemaps/js-api-loader": "^2.0.2",
     "axios": "^1.13.2",
-    "lightningcss-win32-x64-msvc": "^1.31.1",
     "lucide-react": "^0.562.0",
     "postcss-import": "^16.1.1",
     "postcss-nested": "^7.0.2",
