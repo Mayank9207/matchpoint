@@ -3,20 +3,11 @@ const express = require('express');
 const cors = require('cors');
 const mongoose = require('mongoose');
 const cookieParser = require('cookie-parser');
-const connectdb=require('./config/db');
-// Create Express app
+const connectdb = require('./config/db');
+
 const app = express();
 
-/*
-“Why call connectdb() before app.listen()?”
-Because you want to make sure the app only
- starts listening after the database connection is successful —
- otherwise, you could accept requests that depend on DB access before it’s ready.
-*/
-// Middleware setup
-// Replace your current app.use(cors()) with this:
-// matchpoint/backend/index.js
-
+// 1. DYNAMIC CORS SETUP
 const allowedOrigins = [
   'https://matchpoint-dg981sm82-mayanks-projects-32f0b049.vercel.app',
   'https://matchpoint-ch14mpj72-mayanks-projects-32f0b049.vercel.app',
@@ -25,46 +16,41 @@ const allowedOrigins = [
 
 const corsOptions = {
   origin: (origin, callback) => {
-    if (!origin || allowedOrigins.includes(origin)) {
+    // Allows if in list OR any Vercel preview link (ends with .vercel.app)
+    if (!origin || allowedOrigins.includes(origin) || origin.endsWith('.vercel.app')) {
       callback(null, true);
     } else {
       callback(new Error('Not allowed by CORS'));
     }
   },
   credentials: true,
-  optionsSuccessStatus: 200 // Some legacy browsers choke on 204
+  optionsSuccessStatus: 200 
 };
 
+// 2. APPLY CORS MIDDLEWARE
 app.use(cors(corsOptions));
 
-// ADD THIS LINE RIGHT HERE:
-app.options('*', cors(corsOptions));
+// 3. FIX FOR EXPRESS v5 PathError (Named wildcard fixed from '*' to '/*path')
+app.options('/*path', cors(corsOptions)); 
 
 app.use(express.json());
 app.use(cookieParser());
 
-// Optional logging middleware (handy for debugging)
 app.use((req, res, next) => {
   console.log(`[${req.method}] ${req.url}`);
   next();
 });
 
-// Routes (you’ll create these soon)
+// Routes
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/matches', require('./routes/match'));
 
-// Simple API health check for frontend handshake verification
-app.get('/api/health', (req, res) => {
-  res.json({ ok: true });
-});
+// Health checks
+app.get('/api/health', (req, res) => res.json({ ok: true }));
+app.get('/', (req, res) => res.json({ ok: true, message: 'MatchPoint backend running 🚀' }));
 
-// Health check route
-app.get('/', (req, res) => {
-  res.json({ ok: true, message: 'MatchPoint backend running 🚀' });
-});
-
-// 404 handler
-app.use((req, res) => {
+// 4. FIX 404 HANDLER (Named wildcard for Express compatibility)
+app.use('/*path', (req, res) => {
   res.status(404).json({ success: false, error: 'Not Found' });
 });
 
@@ -74,17 +60,14 @@ app.use((err, req, res, next) => {
   res.status(500).json({ success: false, error: err.message || 'Server error' });
 });
 
-// Database + Server start
 const PORT = process.env.PORT || 5000;
 
-// Attempt DB connection but don't crash the process if it fails.
-// This makes the backend resilient during local development or if the DB is temporarily unreachable.
 connectdb()
   .then(() => {
     console.log('Connected to DB ✅');
   })
   .catch((err) => {
-    console.error('Database connection failed (continuing without DB):', err.message || err);
+    console.error('Database connection failed:', err.message || err);
   })
   .finally(() => {
     app.listen(PORT, () => {
