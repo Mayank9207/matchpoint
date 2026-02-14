@@ -14,7 +14,23 @@ Because you want to make sure the app only
  otherwise, you could accept requests that depend on DB access before it’s ready.
 */
 // Middleware setup
-app.use(cors());
+// Replace your current app.use(cors()) with this:
+const allowedOrigins = [
+  'https://matchpoint-87vww6wae-mayanks-projects-32f0b049.vercel.app',
+  'http://localhost:5173' // Keep local dev working
+];
+
+app.use(cors({
+  origin: function (origin, callback) {
+    if (!origin || allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true
+}));
+
 app.use(express.json());
 app.use(cookieParser());
 
