@@ -15,9 +15,11 @@ Because you want to make sure the app only
 */
 // Middleware setup
 // Replace your current app.use(cors()) with this:
+// matchpoint/backend/index.js
+
 const allowedOrigins = [
-  'https://matchpoint-87vww6wae-mayanks-projects-32f0b049.vercel.app',
-  'http://localhost:5173' // Keep local dev working
+  'https://matchpoint-ch14mpj72-mayanks-projects-32f0b049.vercel.app', // Your NEW link
+  'http://localhost:5173'
 ];
 
 app.use(cors({
@@ -25,7 +27,7 @@ app.use(cors({
     if (!origin || allowedOrigins.indexOf(origin) !== -1) {
       callback(null, true);
     } else {
-      callback(new Error('Not allowed by CORS'));
+      callback(new Error('CORS blocked: Origin not allowed'));
     }
   },
   credentials: true
