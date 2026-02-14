@@ -18,23 +18,27 @@ Because you want to make sure the app only
 // matchpoint/backend/index.js
 
 const allowedOrigins = [
-  'https://matchpoint-87vww6wae-mayanks-projects-32f0b049.vercel.app',
+  'https://matchpoint-dg981sm82-mayanks-projects-32f0b049.vercel.app',
   'https://matchpoint-ch14mpj72-mayanks-projects-32f0b049.vercel.app',
   'http://localhost:5173'
 ];
 
-// backend/index.js
-app.use(cors({
-  origin: function (origin, callback) {
-    // Allow any Vercel preview link and localhost
-    if (!origin || origin.includes('vercel.app') || origin.includes('localhost')) {
+const corsOptions = {
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
       callback(new Error('Not allowed by CORS'));
     }
   },
-  credentials: true
-}));
+  credentials: true,
+  optionsSuccessStatus: 200 // Some legacy browsers choke on 204
+};
+
+app.use(cors(corsOptions));
+
+// ADD THIS LINE RIGHT HERE:
+app.options('*', cors(corsOptions));
 
 app.use(express.json());
 app.use(cookieParser());
