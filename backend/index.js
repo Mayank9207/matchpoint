@@ -18,19 +18,26 @@ Because you want to make sure the app only
 // matchpoint/backend/index.js
 
 const allowedOrigins = [
-  'https://matchpoint-ch14mpj72-mayanks-projects-32f0b049.vercel.app', // Your NEW link
+  'https://matchpoint-87vww6wae-mayanks-projects-32f0b049.vercel.app',
+  'https://matchpoint-ch14mpj72-mayanks-projects-32f0b049.vercel.app',
   'http://localhost:5173'
 ];
 
 app.use(cors({
   origin: function (origin, callback) {
-    if (!origin || allowedOrigins.indexOf(origin) !== -1) {
+    // Allow requests with no origin (like mobile apps or curl)
+    if (!origin) return callback(null, true);
+    
+    if (allowedOrigins.indexOf(origin) !== -1) {
       callback(null, true);
     } else {
-      callback(new Error('CORS blocked: Origin not allowed'));
+      console.log("Blocked by CORS:", origin);
+      callback(new Error('Not allowed by CORS'));
     }
   },
-  credentials: true
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
 app.use(express.json());
