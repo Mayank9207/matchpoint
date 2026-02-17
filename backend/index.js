@@ -7,16 +7,15 @@ const connectdb = require('./config/db');
 
 const app = express();
 
-// 1. DYNAMIC CORS SETUP
+// 1. DEFINE CORS OPTIONS FIRST
 const allowedOrigins = [
-  'https://matchpoint-dg981sm82-mayanks-projects-32f0b049.vercel.app',
-  'https://matchpoint-ch14mpj72-mayanks-projects-32f0b049.vercel.app',
+  'https://matchpoint-kappa.vercel.app',
   'http://localhost:5173'
 ];
 
 const corsOptions = {
   origin: (origin, callback) => {
-    // Allows if in list OR any Vercel preview link (ends with .vercel.app)
+    // Allow if origin is in list OR is any Vercel preview link
     if (!origin || allowedOrigins.includes(origin) || origin.endsWith('.vercel.app')) {
       callback(null, true);
     } else {
@@ -24,18 +23,20 @@ const corsOptions = {
     }
   },
   credentials: true,
-  optionsSuccessStatus: 200 
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 };
 
 // 2. APPLY CORS MIDDLEWARE
 app.use(cors(corsOptions));
 
-// 3. FIX FOR EXPRESS v5 PathError (Named wildcard fixed from '*' to '/*path')
-app.options('/*path', cors(corsOptions)); 
+// 3. HANDLE PREFLIGHT (Using the named wildcard for Express v5)
+app.options('/*path', cors(corsOptions));
 
 app.use(express.json());
 app.use(cookieParser());
 
+// Logging middleware
 app.use((req, res, next) => {
   console.log(`[${req.method}] ${req.url}`);
   next();
@@ -49,7 +50,7 @@ app.use('/api/matches', require('./routes/match'));
 app.get('/api/health', (req, res) => res.json({ ok: true }));
 app.get('/', (req, res) => res.json({ ok: true, message: 'MatchPoint backend running 🚀' }));
 
-// 4. FIX 404 HANDLER (Named wildcard for Express compatibility)
+// 4. FIX 404 HANDLER (Named wildcard)
 app.use('/*path', (req, res) => {
   res.status(404).json({ success: false, error: 'Not Found' });
 });
