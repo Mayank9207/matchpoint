@@ -72,7 +72,10 @@ app.use((req, res, next) => {
 });
 
 app.use(cors(corsOptions));
-app.options('*', cors(corsOptions)); // handle preflight for all routes
+
+// IMPORTANT: use a named wildcard here to avoid path-to-regexp errors.
+// Using a bare '*' can throw "Missing parameter name at index 1: *" in some environments.
+app.options('/*path', cors(corsOptions)); // handle preflight for any path
 
 /**
  * ====== Middlewares ======
