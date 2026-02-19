@@ -3,15 +3,10 @@ import axios from "axios";
 // 1. Fixed the variable name to match Vercel (VITE_API_URL)
 // 2. Added '/api' so it correctly routes to your backend endpoints
 const api = axios.create({
-<<<<<<< HEAD
-  baseURL: `${import.meta.env.VITE_API_URL}/api` || "http://localhost:5000/api",
-=======
-  baseURL:
-    import.meta.env.VITE_API_URL ||
-    import.meta.env.VITE_API_BASE_URL ||
-    "/api",
->>>>>>> origin/2026-01-22-0v2p
+  // Fallback to localhost FIRST, then add /api at the end
+  baseURL: `${import.meta.env.VITE_API_URL || "http://localhost:5000"}/api`,
 });
+
 
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem("access_token");
