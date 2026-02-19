@@ -1,7 +1,9 @@
 import axios from "axios";
 
+// 1. Fixed the variable name to match Vercel (VITE_API_URL)
+// 2. Added '/api' so it correctly routes to your backend endpoints
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || "/api",
+  baseURL: `${import.meta.env.VITE_API_URL}/api` || "http://localhost:5000/api",
 });
 
 api.interceptors.request.use((config) => {
@@ -13,7 +15,6 @@ api.interceptors.request.use((config) => {
 });
 
 //this is auth interceptor
-
 api.interceptors.response.use(
   (res) => res,
   (err) => {
