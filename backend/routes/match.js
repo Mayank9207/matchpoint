@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const mongoose = require('mongoose');
 const auth = require('../middleware/auth');
 const User = require('../models/user'); // FIXED: Capitalized 'User' to match convention and prevent ReferenceError
 const Match = require('../models/match');
@@ -77,9 +78,32 @@ matches = matches.map(m => ({
     }
 });
 
+router.get('/:id', async(req, res, next) => {
+    const { id } = req.params;
+
+    if (!mongoose.isValidObjectId(id)) {
+        return res.status(400).json({ success: false, error: 'Invalid match id' });
+    }
+
+    try {
+        const match = await Match.findById(id)
+            .populate("host", "name email age")
+            .populate("participants.user", "name age");
+
+        if (!match) {
+            return res.status(404).json({ success: false, error: 'Match not found' });
+        }
+        
+        return res.status(200).json({ success: true, data: match });
+    }
+    catch (err) {
+        next(err);
+    }
+});
+
 router.post('/', auth, async (req, res, next) => {
     try {
-        const { sport, datetime, location, capacity } = req.body;//these parameter names need to be same as those in the model obv
+        const { sport, datetime, location, locationDetails, capacity, title, gender, age, description, images } = req.body;
 
         // FIXED: Validation & Defensive Checks
         if (!sport) return res.status(400).json({ success: false, error: 'sport required' });
@@ -89,23 +113,43 @@ router.post('/', auth, async (req, res, next) => {
         if (dateObj <= Date.now()) return res.status(400).json({ success:false, error:'datetime must be in the future' });
 
         
-        if (!location || location.lat == null || location.lng == null) {
+        const cap = Number(capacity);
+        if (Number.isNaN(cap) || cap < 2 || cap > 22) {
+            return res.status(400).json({ success: false, error: 'capacity must be between 2 and 22' });
+        }
+
+        let coordinates = null;
+        if (location) {
+            if (Array.isArray(location.coordinates) && location.coordinates.length === 2) {
+                coordinates = [Number(location.coordinates[0]), Number(location.coordinates[1])];
+            } else if (location.lng != null && location.lat != null) {
+                coordinates = [Number(location.lng), Number(location.lat)];
+            }
+        }
+
+        if (
+            !coordinates ||
+            !Number.isFinite(coordinates[0]) ||
+            !Number.isFinite(coordinates[1])
+        ) {
             return res.status(400).json({ success: false, error: 'location (lat/lng) required' });
         }
 
-        const cap = Number(capacity);
-        if (isNaN(cap) || cap < 1) return res.status(400).json({ success: false, error: 'capacity must be >=1' });
-
         const match = await Match.create({
+            title: title || `${sport} Match`,
             sport,
-            datetime: dateObj,//why are we converting datetime to Date object because in the model datetime is of type Date
-            location: { 
-                type: 'Point', 
-                coordinates: [Number(location.lng), Number(location.lat)] // Fixed: Convert to Numbers
-            },//we are using computed property names here to create the coordinates array
-            //otherwise mongo db will not understand location properly
+            datetime: dateObj,
+            location: {
+                type: 'Point',
+                coordinates
+            },
+            locationDetails: locationDetails || undefined,
             host: req.user.id,
-            capacity: cap
+            capacity: cap,
+            gender: gender || 'any',
+            age: age || { minAge: 18, maxAge: 60 },
+            description: description || '',
+            images: images || []
         });
         return res.status(201).json({ success: true, data: match }); //201 created status code
     }
@@ -181,6 +225,75 @@ router.post('/:id/leave',auth,async(req,res,next)=>{
     if (!updatedMatch) return res.status(400).json({ success:false, error:'You are not part of this match' });
 
     return res.json({success:true,data:updatedMatch});
+  }
+  catch(err){
+    next(err);
+  }
+});
+
+
+router.patch('/:id',auth,async(req,res,next)=>{
+  try{
+    const {id} = req.params;
+    const {action,datetime,capacity} = req.body;
+
+    const match=await Match.findById(id);
+
+    if(!match) return res.status(404).json({ success:false, error:'Match not found' });
+
+    if(match.host.toString() !== req.user.id.toString()) {
+      return res.status(403).json({ success:false, error:'Only the host can update this match' });
+    }
+
+    if(match.status !== 'scheduled') {
+      return res.status(400).json({ success:false, error:"Can't update a cancelled or completed match" });
+    }
+
+    switch(action){
+      case 'cancel':{
+        match.status='cancelled';
+        break;
+    }
+
+      case 'reschedule': {
+        const newDatetime=new Date(datetime);
+
+        if(!newDatetime || newDatetime<=Date.now()){
+          return res.status(400).json({ success:false, error:'Invalid datetime' });
+        }
+        match.datetime=newDatetime;
+        break;
+      }
+      
+      case 'update_capacity': {
+        const cap = Number(capacity);
+        if (
+          Number.isNaN(cap) ||
+          cap < 2 ||
+          cap > 22 ||
+          cap < match.participants.length
+        ) {
+          return res.status(400).json({
+            success: false,
+            error: 'Capacity must be between 2 and 22 and >= current participants'
+          });
+        }
+        match.capacity = cap;
+        break;
+      }
+
+      case 'close':
+        match.status='completed';
+        break;
+
+      default:
+        return res.status(400).json({ success:false, error:'Invalid action' });
+    }
+
+    await match.save();
+
+    return res.json({success:true,data:match});
+    
   }
   catch(err){
     next(err);
