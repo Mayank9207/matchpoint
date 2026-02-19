@@ -6,7 +6,11 @@ import { Trophy, Menu, X, LogOut, User, Home, PlusCircle, Calendar } from "lucid
 import api from "../api/client";
 
 export default function Navbar() {
+  const location = useLocation();
   const [me, setMe] = useState(null);
+  const [isLoggedIn, setIsLoggedIn] = useState(
+    !!localStorage.getItem("access_token")
+  );
   const [mobileOpen, setMobileOpen] = useState(false);
 
   useEffect(() => {
@@ -14,109 +18,191 @@ export default function Navbar() {
       const token = localStorage.getItem("access_token");
       if (!token) {
         setMe(null);
+        setIsLoggedIn(false);
         return;
       }
+      setIsLoggedIn(true);
+      
+      // For now, if token exists, consider user logged in
+      // Try to get user data but don't fail if API call fails
       api.get("/auth/me")
         .then((res) => {
-          const user = res.data?.data?.user || res.data?.user;
+          console.log("Auth response:", res.data);
+          const user = res.data?.data?.user || res.data?.user || res.data;
+          console.log("Extracted user:", user);
           setMe(user);
         })
-        .catch(() => {
-          setMe(null);
+        .catch((err) => {
+          console.error("Auth check failed:", err);
+          // Set a basic user object if API fails but token exists
+          setMe({ name: "User" });
         });
     };
+    
     checkAuth();
     window.addEventListener("storage", checkAuth);
-    return () => window.removeEventListener("storage", checkAuth);
-  }, []);
+    window.addEventListener("auth-change", checkAuth);
+    return () => {
+      window.removeEventListener("storage", checkAuth);
+      window.removeEventListener("auth-change", checkAuth);
+    };
+  }, [location.pathname]);
 
   const handleLogout = () => {
     localStorage.removeItem("access_token");
     setMe(null);
+    setIsLoggedIn(false);
     window.location.href = "/";
   };
 
-  const token = !!localStorage.getItem("access_token");
-  const isLoggedIn = token && !!me;
-
   return (
     <nav className="sticky top-0 z-50 w-full border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+      <div className="w-full px-4 sm:px-6 lg:px-8">
         <div className="flex h-16 items-center justify-between">
           {/* Logo / Brand */}
-          <Link to={isLoggedIn ? "/matches" : "/"} className="flex items-center gap-3">
+          <Link to={isLoggedIn ? "/matches" : "/"} className="flex items-center gap-3 group">
             <div className="flex items-center gap-2">
-              <Trophy className="w-6 h-6 text-orange-500" />
-              <span className="text-lg font-semibold text-foreground">MatchPoint</span>
+              <div className="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center group-hover:bg-primary/20 transition-colors">
+                <Trophy className="w-5 h-5 text-primary" />
+              </div>
+              <span className="text-xl font-bold text-foreground group-hover:text-primary transition-colors">MatchPoint</span>
             </div>
           </Link>
 
           {/* Desktop links */}
-          <div className="hidden md:flex md:items-center md:gap-4">
+          <div className="hidden md:flex md:items-center md:gap-6">
             {isLoggedIn ? (
               <>
-                <Link to="/matches" className="text-sm text-foreground hover:text-primary px-3 py-2 rounded-md">Matches</Link>
-                <Link to="/create" className="text-sm text-foreground hover:text-primary px-3 py-2 rounded-md">Create</Link>
-                <Link to="/profile" className="text-sm text-foreground hover:text-primary px-3 py-2 rounded-md">Profile</Link>
-                {me?.name && <span className="text-sm text-muted-foreground">Hi, {me.name}</span>}
-                <button
-                  onClick={handleLogout}
-                  className="ml-2 rounded-md bg-secondary px-3 py-1 text-sm text-secondary-foreground hover:bg-secondary/80"
+                <Link 
+                  to="/matches" 
+                  className="text-sm font-medium text-foreground hover:text-primary transition-colors px-3 py-2 rounded-md hover:bg-accent"
                 >
-                  Logout
-                </button>
+                  Matches
+                </Link>
+                <Link 
+                  to="/create" 
+                  className="text-sm font-medium text-foreground hover:text-primary transition-colors px-3 py-2 rounded-md hover:bg-accent"
+                >
+                  Create Match
+                </Link>
+                <Link 
+                  to="/profile" 
+                  className="text-sm font-medium text-foreground hover:text-primary transition-colors px-3 py-2 rounded-md hover:bg-accent flex items-center gap-2"
+                >
+                  <User className="w-4 h-4" />
+                  Profile
+                </Link>
+                <div className="flex items-center gap-3 ml-4 pl-4 border-l border-border">
+                  <span className="text-sm text-muted-foreground">Hi, {me?.name || 'User'}</span>
+                  <Button
+                    onClick={handleLogout}
+                    variant="outline"
+                    size="sm"
+                    className="flex items-center gap-2"
+                  >
+                    <LogOut className="w-4 h-4" />
+                    Logout
+                  </Button>
+                </div>
               </>
             ) : (
-              <>
-                <Link to="/login" className="text-sm text-foreground hover:text-primary px-3 py-2 rounded-md">Login</Link>
-                <Link to="/register" className="text-sm text-foreground hover:text-primary px-3 py-2 rounded-md">Register</Link>
-              </>
+              <div className="flex items-center gap-4">
+                <Link 
+                  to="/login" 
+                  className="text-sm font-medium text-foreground hover:text-primary transition-colors px-3 py-2 rounded-md hover:bg-accent"
+                >
+                  Login
+                </Link>
+                <Link 
+                  to="/register" 
+                  className="text-sm font-medium text-foreground hover:text-primary transition-colors px-3 py-2 rounded-md hover:bg-accent"
+                >
+                  Register
+                </Link>
+              </div>
             )}
           </div>
 
           {/* Mobile toggle */}
           <div className="md:hidden">
-            <button
+            <Button
               onClick={() => setMobileOpen(s => !s)}
-              className="inline-flex items-center justify-center rounded-md p-2 text-foreground hover:bg-secondary"
+              variant="ghost"
+              size="sm"
+              className="h-9 w-9 p-0"
               aria-label="Toggle menu"
             >
               {mobileOpen ? (
-                <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                  <path d="M18 6 6 18" strokeWidth="1.6" />
-                  <path d="m6 6 12 12" strokeWidth="1.6" />
-                </svg>
+                <X className="h-5 w-5" />
               ) : (
-                <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                  <line x1="4" x2="20" y1="6" y2="6" strokeWidth="1.6" />
-                  <line x1="4" x2="20" y1="12" y2="12" strokeWidth="1.6" />
-                  <line x1="4" x2="20" y1="18" y2="18" strokeWidth="1.6" />
-                </svg>
+                <Menu className="h-5 w-5" />
               )}
-            </button>
+            </Button>
           </div>
         </div>
       </div>
 
       {/* Mobile menu */}
-      <div className={`md:hidden border-t border-border ${mobileOpen ? "block" : "hidden"}`}>
-        <div className="space-y-1 px-4 pb-3 pt-2">
-          {isLoggedIn ? (
-            <>
-              <Link to="/matches" onClick={() => setMobileOpen(false)} className="block px-3 py-2 text-base text-foreground rounded-md hover:bg-secondary">Matches</Link>
-              <Link to="/create" onClick={() => setMobileOpen(false)} className="block px-3 py-2 text-base text-foreground rounded-md hover:bg-secondary">Create</Link>
-              <Link to="/profile" onClick={() => setMobileOpen(false)} className="block px-3 py-2 text-base text-foreground rounded-md hover:bg-secondary">Profile</Link>
-              {me?.name && <div className="px-3 py-2 text-sm text-muted-foreground">Hi, {me.name}</div>}
-              <button onClick={() => { setMobileOpen(false); handleLogout(); }} className="w-full text-left px-3 py-2 text-base text-foreground rounded-md hover:bg-secondary">Logout</button>
-            </>
-          ) : (
-            <>
-              <Link to="/login" onClick={() => setMobileOpen(false)} className="block px-3 py-2 text-base text-foreground rounded-md hover:bg-secondary">Login</Link>
-              <Link to="/register" onClick={() => setMobileOpen(false)} className="block px-3 py-2 text-base text-foreground rounded-md hover:bg-secondary">Register</Link>
-            </>
-          )}
+      {mobileOpen && (
+        <div className="md:hidden border-t border-border bg-background">
+          <div className="px-4 py-4 space-y-2">
+            {isLoggedIn ? (
+              <>
+                <Link 
+                  to="/matches" 
+                  onClick={() => setMobileOpen(false)} 
+                  className="block px-4 py-3 text-base font-medium text-foreground rounded-md hover:bg-accent transition-colors"
+                >
+                  Matches
+                </Link>
+                <Link 
+                  to="/create" 
+                  onClick={() => setMobileOpen(false)} 
+                  className="block px-4 py-3 text-base font-medium text-foreground rounded-md hover:bg-accent transition-colors"
+                >
+                  Create Match
+                </Link>
+                <Link 
+                  to="/profile" 
+                  onClick={() => setMobileOpen(false)} 
+                  className="block px-4 py-3 text-base font-medium text-foreground rounded-md hover:bg-accent transition-colors flex items-center gap-2"
+                >
+                  <User className="w-4 h-4" />
+                  Profile
+                </Link>
+                <div className="border-t border-border pt-4 mt-4">
+                  <div className="px-4 py-2 text-sm text-muted-foreground">Hi, {me?.name || 'User'}</div>
+                  <Button 
+                    onClick={() => { setMobileOpen(false); handleLogout(); }} 
+                    variant="outline" 
+                    className="w-full mt-2 flex items-center justify-center gap-2"
+                  >
+                    <LogOut className="w-4 h-4" />
+                    Logout
+                  </Button>
+                </div>
+              </>
+            ) : (
+              <>
+                <Link 
+                  to="/login" 
+                  onClick={() => setMobileOpen(false)} 
+                  className="block px-4 py-3 text-base font-medium text-foreground rounded-md hover:bg-accent transition-colors"
+                >
+                  Login
+                </Link>
+                <Link 
+                  to="/register" 
+                  onClick={() => setMobileOpen(false)} 
+                  className="block px-4 py-3 text-base font-medium text-foreground rounded-md hover:bg-accent transition-colors"
+                >
+                  Register
+                </Link>
+              </>
+            )}
+          </div>
         </div>
-      </div>
+      )}
     </nav>
   );
 }
