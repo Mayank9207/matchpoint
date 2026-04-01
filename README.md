@@ -5,7 +5,7 @@
 [![Live Demo](https://img.shields.io/badge/Live-Demo-brightgreen.svg)](#) [![MERN Stack](https://img.shields.io/badge/Stack-MERN-blue.svg)](#)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](#)
 
-*(📸 **Tip:** Replace this text with a cool screenshot or GIF of your application's home page or map interface!)*
+![My Screenshot](./images/Screenshot%20%28603%29.png)
 
 ---
 
