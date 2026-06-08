@@ -55,14 +55,16 @@ The heuristic runs three deterministic starting orderings (size-descending, leas
 - **1-opt relocate** — move a squad to a cheaper room with spare capacity
 - **2-opt pairwise swap** — swap two squads between rooms if combined cost drops
 - **Ejection chains** — evict a placed squad to make room for an unplaced one (player-count move)
-- **Substitution** — replace an expensive placed squad with a cheaper unplaced one of equal or smaller size (cost move; freed capacity re-enters the pool)
+- **Substitution** — replace an expensive placed squad with a cheaper unplaced one of equal or larger size (cost move; `size(U) ≥ size(P)` guards player count)
 
 ### Benchmark results
 
 Tested against the CP-SAT oracle across 15 configurations (5–30 squads, ratio 0.6–2.0):
 
 - **13 / 15 configurations within 5% of optimal cost**, player count matching oracle exactly on all 15
-- 2 known hard cases (documented in `engine/DESIGN.md`): a 20-squad full-room instance requiring 3-opt rotations, and an adversarial undersupplied instance requiring compound squad substitution
+- 2 known hard cases (`xfail`, documented in `engine/DESIGN.md`):
+  - `tight_20` (20 squads, 5 rooms, ratio 1.0) — 11.5% gap; full rooms block all 2-opt swaps between unequal-size squads, requires 3-opt rotations
+  - `undersupplied_20` (20 squads, 4 rooms, ratio 0.6) — 26.3% gap; oracle evicts several small high-cost squads in a compound move, requires multi-squad substitution
 
 ```bash
 cd engine

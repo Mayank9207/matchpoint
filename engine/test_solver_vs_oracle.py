@@ -1,18 +1,4 @@
-"""
-Parametrized comparison: heuristic vs oracle across generated instances.
 
-This file proves the README claim "heuristic stays within 5% of optimal."
-If you change that claim, change the threshold here in lockstep. The
-tests must enforce no looser bound than the README advertises.
-
-Player-count gap: strict equality on small instances. The oracle places
-the maximum possible players; FFD + pairwise swap should match that on
-instances up to ~30 squads.
-
-Cost gap: < 5% on every sweep configuration. Includes deliberately
-hard cases (high contention, high size variance, undersupplied) to make
-the threshold meaningful.
-"""
 from __future__ import annotations
 
 import math
@@ -28,7 +14,7 @@ from solver import solve_oracle, solve_heuristic
 from scoring import is_feasible
 
 
-COST_GAP_THRESHOLD = 0.05  # 5% — must match README claim exactly
+COST_GAP_THRESHOLD = 0.05 
 
 
 # Sweep configurations: (n_squads, n_rooms, contention_ratio, seed, label)

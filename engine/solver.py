@@ -215,7 +215,7 @@ def _local_search(
                 assignment[p] = room_p
                 ejected = True
 
-        # ── substitution ─────────────────────────────────────────────────
+
         # Replace placed squad p with unplaced u in the same room, only when
         # size(u) >= size(p) so player count never drops. Without this guard,
         # swapping a small u for a large p loses players that can't be
