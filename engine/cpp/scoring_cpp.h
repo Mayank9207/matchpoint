@@ -4,7 +4,7 @@
 #include <limits>
 #include <cstdlib>
 
-inline double haversine_m(const Squad& s, const Room& r) {
+inline double haversine_m(const Squads& squads, int s_idx, const Rooms& rooms, int r_idx) {
     constexpr double EARTH_R = 6371000.0;  // metres
     // Mirror Python's utils.haversine_m bit-for-bit: convert each coordinate
     // to radians first (x * (pi/180)), then take differences of the radian
@@ -12,10 +12,10 @@ inline double haversine_m(const Squad& s, const Room& r) {
     // the result byte-identical with CPython's math.radians.
     constexpr double DEG2RAD = M_PI / 180.0;
 
-    double rlat1 = s.lat * DEG2RAD;
-    double rlon1 = s.lon * DEG2RAD;
-    double rlat2 = r.lat * DEG2RAD;
-    double rlon2 = r.lon * DEG2RAD;
+    double rlat1 = squads.lat[s_idx] * DEG2RAD;
+    double rlon1 = squads.lon[s_idx] * DEG2RAD;
+    double rlat2 = rooms.lat[r_idx] * DEG2RAD;
+    double rlon2 = rooms.lon[r_idx] * DEG2RAD;
 
     double dlat = rlat2 - rlat1;
     double dlon = rlon2 - rlon1;
@@ -27,24 +27,24 @@ inline double haversine_m(const Squad& s, const Room& r) {
     return 2.0 * EARTH_R * std::asin(std::sqrt(a));
 }
 
-inline bool is_feasible(const Squad& s, const Room& r) {
+inline bool is_feasible(const Squads& squads, int s_idx, const Rooms& rooms, int r_idx) {
 
-    if(s.sport != r.sport)return false;
+    if(squads.sport[s_idx] != rooms.sport[r_idx])return false;
 
-    if(s.size > r.capacity)return false;
+    if(squads.size[s_idx] > rooms.capacity[r_idx])return false;
 
-    if(r.match_time < s.start_time || r.match_time > s.end_time)return false;
+    if(rooms.match_time[r_idx] < squads.start_time[s_idx] || rooms.match_time[r_idx] > squads.end_time[s_idx])return false;
 
-    if(haversine_m(s,r) > s.max_distance)return false;
+    if(haversine_m(squads,s_idx,rooms,r_idx) > squads.max_distance[s_idx])return false;
 
     return true;
 
 }
 
-inline double score(const Squad& s, const Room& r, double w_dist, double w_tier) {
+inline double score(const Squads& squads, int s_idx, const Rooms& rooms, int r_idx, double w_dist, double w_tier) {
 
 
-    if(!is_feasible(s,r))return std::numeric_limits<double> :: infinity();
+    if(!is_feasible(squads,s_idx,rooms,r_idx))return std::numeric_limits<double> :: infinity();
 
-    else return w_dist * (haversine_m(s,r)/s.max_distance) + w_tier * (std::abs(s.tier - r.desired_tier)/2.0);
+    else return w_dist * (haversine_m(squads,s_idx,rooms,r_idx)/squads.max_distance[s_idx]) + w_tier * (std::abs(squads.tier[s_idx] - rooms.desired_tier[r_idx])/2.0);
 }

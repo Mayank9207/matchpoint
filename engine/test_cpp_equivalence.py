@@ -54,6 +54,9 @@ CONFIGS = [
 
     # Edge case — empty instance, both solvers must return ({}, 0.0)
     pytest.param(0,  0,  1.0, 210, id="empty"),
+   
+    pytest.param(100, 50, 1.0, 211, id="huge_tight"),
+    pytest.param(150, 120, 1.5, 212, id="huge_slack"),
 ]
 
 # Weights used for both solvers; must be identical so outputs are comparable.

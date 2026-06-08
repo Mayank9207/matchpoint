@@ -14,8 +14,8 @@
 
 
 static void ffd_assign(
-    const std::vector<Squad>& squads,
-    const std::vector<Room>& rooms,
+    const Squads& squads,
+    const Rooms& rooms,
     const std::vector<int>& order,
     double w_dist,
     double w_tier,
@@ -25,15 +25,13 @@ static void ffd_assign(
 
     //actually the order is given to us, the role of this function is to perform ffd as per that parameter
     for(auto& idx : order){
-        const Squad& s = squads[idx];
         int best_room=-1;
         double best_score = std::numeric_limits<double> :: infinity();
 
-        for(int r_idx=0;r_idx<rooms.size();r_idx++){
-            const Room& r= rooms[r_idx];
+        for(int r_idx=0;r_idx<rooms.size_();r_idx++){
 
-            if(room_load[r_idx]+s.size <= r.capacity && is_feasible(s,r)){
-                double s_score = score(s,r,w_dist,w_tier);
+            if(room_load[r_idx]+squads.size[idx] <= rooms.capacity[r_idx] && is_feasible(squads,idx,rooms,r_idx)){
+                double s_score = score(squads,idx,rooms,r_idx,w_dist,w_tier);
                 if(s_score < best_score){
                     best_score = s_score;
                     best_room = r_idx;
@@ -42,7 +40,7 @@ static void ffd_assign(
         }
         if(best_room != -1){
             assignment.set(idx, best_room);
-            room_load[best_room] += s.size;
+            room_load[best_room] += squads.size[idx];
         }
 
     }
@@ -52,8 +50,8 @@ static void ffd_assign(
 // 1 opt:try moving a single placed squad to a cheaper feasible room with headroom
 
 static bool relocate_move(
-    const std::vector<Squad>& squads,
-    const std::vector<Room>& rooms,
+    const Squads& squads,
+    const Rooms& rooms,
     double w_dist,
     double w_tier,
     OrderedAssign& assignment,
@@ -65,24 +63,21 @@ static bool relocate_move(
 
     for(int s_idx : assignment.order){
         int r_idx = assignment.at(s_idx);
-        const Squad& s = squads[s_idx];
-        const Room& current_room = rooms[r_idx];
-        double current_score = score(s,current_room,w_dist,w_tier);
+        double current_score = score(squads,s_idx,rooms,r_idx,w_dist,w_tier);
 
-        for(int new_r_idx=0; new_r_idx<rooms.size(); new_r_idx++){
+        for(int new_r_idx=0; new_r_idx<rooms.size_(); new_r_idx++){
             if(new_r_idx == r_idx)continue;
 
-            const Room& new_room = rooms[new_r_idx];
-            if(room_load[new_r_idx]+s.size <= new_room.capacity && is_feasible(s,new_room)){
-                double new_score = score(s,new_room,w_dist,w_tier);
+            if(room_load[new_r_idx]+squads.size[s_idx] <= rooms.capacity[new_r_idx] && is_feasible(squads,s_idx,rooms,new_r_idx)){
+                double new_score = score(squads,s_idx,rooms,new_r_idx,w_dist,w_tier);
 
                 if(new_score < current_score){
 
                     assignment.set(s_idx, new_r_idx);
-                    room_load[r_idx] -= s.size;
-                    room_load[new_r_idx] += s.size;
+                    room_load[r_idx] -= squads.size[s_idx];
+                    room_load[new_r_idx] += squads.size[s_idx];
                     r_idx = new_r_idx;                                  // re-baseline current room
-                    current_score = score(s,new_room,w_dist,w_tier);   // re-baseline current cost
+                    current_score = score(squads,s_idx,rooms,new_r_idx,w_dist,w_tier);   // re-baseline current cost
                     relocated = true;
 
                 }
@@ -96,8 +91,8 @@ static bool relocate_move(
 // 2 opt: swap two placed squads rooms if both fit and total cost drops
 
 static bool swap_move(
-    const std::vector<Squad>& squads,
-    const std::vector<Room>& rooms,
+    const Squads& squads,
+    const Rooms& rooms,
     double w_dist,
     double w_tier,
     OrderedAssign& assignment,
@@ -113,26 +108,21 @@ static bool swap_move(
             int s2_idx = assignment.order[i2];
             int r2_idx = assignment.at(s2_idx);
 
-            const Squad& s1 = squads[s1_idx];
-            const Squad& s2 = squads[s2_idx];
-            const Room& r1 = rooms[r1_idx];
-            const Room& r2 = rooms[r2_idx];
-
-            if(!is_feasible(s1,r2) || !is_feasible(s2,r1))continue;
+            if(!is_feasible(squads,s1_idx,rooms,r2_idx) || !is_feasible(squads,s2_idx,rooms,r1_idx))continue;
             //also check headroom
-            if(room_load[r1_idx] - s1.size + s2.size > r1.capacity)continue;
-            if(room_load[r2_idx] - s2.size + s1.size > r2.capacity)continue;
+            if(room_load[r1_idx] - squads.size[s1_idx] + squads.size[s2_idx] > rooms.capacity[r1_idx])continue;
+            if(room_load[r2_idx] - squads.size[s2_idx] + squads.size[s1_idx] > rooms.capacity[r2_idx])continue;
 
-            double current_score = score(s1,r1,w_dist,w_tier) + score(s2,r2,w_dist,w_tier);
-            double new_score = score(s1,r2,w_dist,w_tier) + score(s2,r1,w_dist,w_tier);
+            double current_score = score(squads,s1_idx,rooms,r1_idx,w_dist,w_tier) + score(squads,s2_idx,rooms,r2_idx,w_dist,w_tier);
+            double new_score = score(squads,s1_idx,rooms,r2_idx,w_dist,w_tier) + score(squads,s2_idx,rooms,r1_idx,w_dist,w_tier);
 
             if(new_score < current_score){
                 //perform swap
                 assignment.set(s1_idx, r2_idx);
                 assignment.set(s2_idx, r1_idx);
 
-                room_load[r1_idx] = room_load[r1_idx] - s1.size + s2.size;
-                room_load[r2_idx] = room_load[r2_idx] - s2.size + s1.size;
+                room_load[r1_idx] = room_load[r1_idx] - squads.size[s1_idx] + squads.size[s2_idx];
+                room_load[r2_idx] = room_load[r2_idx] - squads.size[s2_idx] + squads.size[s1_idx];
 
                 swapped = true;
             }
@@ -150,8 +140,8 @@ static bool swap_move(
 // Accept if the chain nets more players matched (player count beats cost — matches
 // the oracle's lex priority).
 static bool ejection_chain_move(
-    const std::vector<Squad>& squads,
-    const std::vector<Room>& rooms,
+    const Squads& squads,
+    const Rooms& rooms,
     double w_dist,
     double w_tier,
     OrderedAssign& assignment,
@@ -162,24 +152,23 @@ static bool ejection_chain_move(
 
    std::vector<int> unplaced;
 
-    for (int i = 0; i < squads.size(); i++) {
+    for (int i = 0; i < squads.size_(); i++) {
         if(!assignment.contains(i))unplaced.push_back(i);
     }
 
-    std::stable_sort(unplaced.begin(), unplaced.end(),[&](int a, int b) { return squads[a].size > squads[b].size; });
+    std::stable_sort(unplaced.begin(), unplaced.end(),[&](int a, int b) { return squads.size[a] > squads.size[b]; });
     //fix brackets please
 
     for(int u_idx=0; u_idx<unplaced.size(); u_idx++){
 
-        const Squad& s = squads[unplaced[u_idx]];
+        int s_idx = unplaced[u_idx];
         int best_room = -1;
         double best_score = std::numeric_limits<double> :: infinity();
 
         //subphase A: try to directly place u
-        for(int r_idx=0; r_idx<rooms.size(); r_idx++){
-            const Room& r = rooms[r_idx];
-            if(is_feasible(s,r) && room_load[r_idx] + s.size <= r.capacity){
-                double s_score = score(s,r,w_dist,w_tier);
+        for(int r_idx=0; r_idx<rooms.size_(); r_idx++){
+            if(is_feasible(squads,s_idx,rooms,r_idx) && room_load[r_idx] + squads.size[s_idx] <= rooms.capacity[r_idx]){
+                double s_score = score(squads,s_idx,rooms,r_idx,w_dist,w_tier);
                 if(s_score < best_score){
                     best_score = s_score;
                     best_room = r_idx;
@@ -190,7 +179,7 @@ static bool ejection_chain_move(
         if(best_room != -1){
             //place u in best_room
             assignment.set(unplaced[u_idx], best_room);
-            room_load[best_room] += s.size;
+            room_load[best_room] += squads.size[s_idx];
             ejected = true;
             continue;
         }
@@ -198,28 +187,25 @@ static bool ejection_chain_move(
         //subphase B: try to evict a placed squad and relocate it
         std::optional<std::tuple<double,int,int,int>> best_move; //delta, p, room_u, room_p
 
-        for(int j=0; j<rooms.size(); j++){
-            const Room& r = rooms[j];
-            if(!is_feasible(s,r))continue;
+        for(int j=0; j<rooms.size_(); j++){
+            if(!is_feasible(squads,s_idx,rooms,j))continue;
 
-            int needed = room_load[j] + s.size - r.capacity;
+            int needed = room_load[j] + squads.size[s_idx] - rooms.capacity[j];
             if(needed <= 0)continue; //would have been caught by subphase A
 
             //find candidates for eviction
             for(int p_idx : assignment.order){
                 int p_room = assignment.at(p_idx);
                 if(p_room != j)continue;
-                const Squad& p = squads[p_idx];
-                if(p.size < needed)continue;
+                if(squads.size[p_idx] < needed)continue;
 
                 //try to relocate p to another room k
-                for(int k=0; k<rooms.size(); k++){
+                for(int k=0; k<rooms.size_(); k++){
                     if(k == j)continue;
-                    const Room& r_k = rooms[k];
-                    if(!is_feasible(p,r_k))continue;
-                    if(room_load[k] + p.size > r_k.capacity)continue;
+                    if(!is_feasible(squads,p_idx,rooms,k))continue;
+                    if(room_load[k] + squads.size[p_idx] > rooms.capacity[k])continue;
 
-                    double delta = score(s,r,w_dist,w_tier) + score(p,r_k,w_dist,w_tier) - score(p,r,w_dist,w_tier);
+                    double delta = score(squads,s_idx,rooms,j,w_dist,w_tier) + score(squads,p_idx,rooms,k,w_dist,w_tier) - score(squads,p_idx,rooms,j,w_dist,w_tier);
                     if(!best_move.has_value() || delta < std::get<0>(best_move.value())){
                         best_move = std::make_tuple(delta, p_idx, j, k);
                     }
@@ -228,15 +214,14 @@ static bool ejection_chain_move(
         }
         if(best_move.has_value()){
             auto [delta, p_idx, room_u, room_p] = best_move.value();
-            const Squad& p = squads[p_idx];
 
             //apply move: place u in room_u, relocate p to room_p
             assignment.set(unplaced[u_idx], room_u);
             assignment.set(p_idx, room_p);
 
-            room_load[room_u] -= p.size;
-            room_load[room_u] += s.size;
-            room_load[room_p] += p.size; //p leaves room_u and goes to room_p
+            room_load[room_u] -= squads.size[p_idx];
+            room_load[room_u] += squads.size[s_idx];
+            room_load[room_p] += squads.size[p_idx]; //p leaves room_u and goes to room_p
 
             ejected = true;
         }
@@ -253,8 +238,8 @@ static bool ejection_chain_move(
 // score(U) < score(P) AND size(U) >= size(P). The size guard is a CORRECTNESS
 // INVARIANT — removing it drops player count on undersupplied instances.
 static bool substitution_move(
-    const std::vector<Squad>& squads,
-    const std::vector<Room>& rooms,
+    const Squads& squads,
+    const Rooms& rooms,
     double w_dist,
     double w_tier,
     OrderedAssign& assignment,
@@ -263,28 +248,26 @@ static bool substitution_move(
     bool substituted = false;
 
     std::vector<int> unplaced;
-    for (int i = 0; i < squads.size(); i++) {
+    for (int i = 0; i < squads.size_(); i++) {
         if(!assignment.contains(i))unplaced.push_back(i);
     }
         //Python walks unplaced in ascending index order here (no size sort)
 
         //now we brute force over all pairs of unplaced and placed squads and check if substituting is beneficial and feasible
         for(int u_idx=0; u_idx<unplaced.size(); u_idx++){
-            const Squad& u = squads[unplaced[u_idx]];
+            int u = unplaced[u_idx];
 
             std::vector<std::pair<int,int>> placed_pairs;
             for(int p_idx : assignment.order)placed_pairs.push_back({p_idx, assignment.at(p_idx)});
             std::optional<std::tuple<double, int, int>> best_sub;
 
             for(const auto& [p_idx, r_idx] : placed_pairs){
-                const Squad& p = squads[p_idx];
-                const Room& r = rooms[r_idx];
 
-                if(u.size < p.size)continue; //size guard
-                if(!is_feasible(u,r))continue; //feasibility guard
-                if(room_load[r_idx] - p.size + u.size > r.capacity)continue; //capacity guard
+                if(squads.size[u] < squads.size[p_idx])continue; //size guard
+                if(!is_feasible(squads,u,rooms,r_idx))continue; //feasibility guard
+                if(room_load[r_idx] - squads.size[p_idx] + squads.size[u] > rooms.capacity[r_idx])continue; //capacity guard
 
-                double delta = score(p,r,w_dist,w_tier) - score(u,r,w_dist,w_tier);
+                double delta = score(squads,p_idx,rooms,r_idx,w_dist,w_tier) - score(squads,u,rooms,r_idx,w_dist,w_tier);
 
                 if (delta > 0) {
                     if (!best_sub.has_value() || delta > std::get<0>(best_sub.value())) {
@@ -298,8 +281,8 @@ static bool substitution_move(
                 assignment.erase(p_idx);
                 assignment.set(unplaced[u_idx], r_idx);
 
-                room_load[r_idx] -= squads[p_idx].size;
-                room_load[r_idx] += u.size;
+                room_load[r_idx] -= squads.size[p_idx];
+                room_load[r_idx] += squads.size[u];
 
                 substituted = true;
             }
@@ -313,8 +296,8 @@ static bool substitution_move(
 // Run all four move types in a fixed order until no move improves the solution.
 // Terminates because each move strictly improves a bounded objective.
 static void local_search(
-    const std::vector<Squad>& squads,
-    const std::vector<Room>& rooms,
+    const Squads& squads,
+    const Rooms& rooms,
     double w_dist,
     double w_tier,
     int max_iter,
@@ -342,8 +325,8 @@ static void local_search(
 // Compute total assignment cost. Walk assignment in insertion order (matching
 // the Python dict the heuristic mirrors).
 static double total_cost(
-    const std::vector<Squad>& squads,
-    const std::vector<Room>& rooms,
+    const Squads& squads,
+    const Rooms& rooms,
     const OrderedAssign& assignment,
     double w_dist,
     double w_tier
@@ -351,9 +334,7 @@ static double total_cost(
     double cost = 0.0;
     for(int s_idx : assignment.order){
         int r_idx = assignment.at(s_idx);
-        const Squad& s = squads[s_idx];
-        const Room& r = rooms[r_idx];
-        cost += score(s,r,w_dist,w_tier);
+        cost += score(squads,s_idx,rooms,r_idx,w_dist,w_tier);
     }
 
 
@@ -366,40 +347,40 @@ static double total_cost(
 // ============================================================
 
 std::pair<std::map<int,int>, double> solve_heuristic_cpp(
-    const std::vector<Squad>& squads,
-    const std::vector<Room>& rooms,
+    const Squads& squads,
+    const Rooms& rooms,
     double w_dist,
     double w_tier,
     int max_iter
 ) {
 
-    std::vector<int> base_indices(squads.size());
+    std::vector<int> base_indices(squads.size_());
     std::iota(base_indices.begin(), base_indices.end(), 0);
 
     std::vector<int> order_size = base_indices;
 
     std::stable_sort(order_size.begin(), order_size.end(), [&](int a, int b) {
-        return squads[a].size > squads[b].size;
+        return squads.size[a] > squads.size[b];
     });
 
-    std::vector<int> flex_counts(squads.size(), 0);
-    for (int i = 0; i < squads.size(); ++i) {
-        for (const auto& r : rooms) {
-            if (is_feasible(squads[i], r)) flex_counts[i]++;
+    std::vector<int> flex_counts(squads.size_(), 0);
+    for (int i = 0; i < squads.size_(); ++i) {
+        for (int j = 0; j < rooms.size_(); ++j) {
+            if (is_feasible(squads, i, rooms, j)) flex_counts[i]++;
         }
     }
     std::vector<int> order_flex = base_indices;
 
     std::stable_sort(order_flex.begin(), order_flex.end(), [&](int a, int b) {
         if (flex_counts[a] != flex_counts[b]) return flex_counts[a] < flex_counts[b];
-        return squads[a].size > squads[b].size;   // Python tiebreak: -size
+        return squads.size[a] > squads.size[b];   // Python tiebreak: -size
     });
 
-    std::vector<double> min_costs(squads.size(), std::numeric_limits<double>::infinity());
-    for (int i = 0; i < squads.size(); ++i) {
-        for (const auto& r : rooms) {
-            if (is_feasible(squads[i], r)) {
-                double c = score(squads[i], r, w_dist, w_tier);
+    std::vector<double> min_costs(squads.size_(), std::numeric_limits<double>::infinity());
+    for (int i = 0; i < squads.size_(); ++i) {
+        for (int j = 0; j < rooms.size_(); ++j) {
+            if (is_feasible(squads, i, rooms, j)) {
+                double c = score(squads, i, rooms, j, w_dist, w_tier);
                 if (c < min_costs[i]) min_costs[i] = c;
             }
         }
@@ -408,21 +389,21 @@ std::pair<std::map<int,int>, double> solve_heuristic_cpp(
     std::vector<int> order_cost = base_indices;
     std::stable_sort(order_cost.begin(), order_cost.end(), [&](int a, int b) {
         if (min_costs[a] != min_costs[b]) return min_costs[a] < min_costs[b];
-        return squads[a].size > squads[b].size;   // Python tiebreak: -size
+        return squads.size[a] > squads.size[b];   // Python tiebreak: -size
     });
 
     //we have laid out the orderings now we place them in a 2d vector and run the whole flow over each of them
 
     std::vector<std::vector<int>> orderings = {order_size, order_flex, order_cost};
 
-    OrderedAssign best_assignment(squads.size());
+    OrderedAssign best_assignment(squads.size_());
     int best_placed_players = -1;
     double best_cost = std::numeric_limits<double>::infinity();
 
     for (const auto& order : orderings) {
 
-        OrderedAssign current_assignment(squads.size());
-        std::vector<int> current_load(rooms.size(), 0);
+        OrderedAssign current_assignment(squads.size_());
+        std::vector<int> current_load(rooms.size_(), 0);
 
         ffd_assign(squads, rooms, order, w_dist, w_tier, current_assignment, current_load);
 
@@ -433,7 +414,7 @@ std::pair<std::map<int,int>, double> solve_heuristic_cpp(
 
         int current_placed = 0;
         for (int s_idx : current_assignment.order) {
-            current_placed += squads[s_idx].size;
+            current_placed += squads.size[s_idx];
         }
         double current_cost = total_cost(squads, rooms, current_assignment, w_dist, w_tier);
 
