@@ -40,7 +40,7 @@ class Squad:
     end_time: float
 
     def __post_init__(self):
-        # cap at 10 — beyond that the solver overhead outweighs the benefit
+        # The algo doesn't get to work much if the squad sizes are too large so we cap at 10.
         if not 1 <= self.size <= 10:
             raise ValueError(f"Size of the team must be 1-10, got {self.size}")
         if self.max_distance <= 0:

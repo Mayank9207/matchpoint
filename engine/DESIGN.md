@@ -159,7 +159,7 @@ After construction, one local search loop runs until no phase makes progress.
 
 **Ejection chains** — for each unplaced squad U: first try a direct slot; if none, evict a placed squad P to a third room k and put U in P's old room. Accepts any valid chain — player count outranks cost. Single-step by design; multi-step chains need cycle detection.
 
-**Substitution** — for each unplaced squad U and each placed squad P where `size(U) ≤ size(P)`: if U is cheaper than P in P's room, evict P and install U. Freed capacity (`P.size - U.size` slots) re-enters the pool; ejection chains absorb it on the next outer-loop pass. This is the cost-optimisation counterpart to ejection chains — ejection chains fire for player-count reasons, substitution fires for cost reasons.
+**Substitution** — for each unplaced squad U and each placed squad P where `size(U) ≥ size(P)`: if U is cheaper than P in P's room, evict P and install U. The guard `size(U) ≥ size(P)` ensures player count never drops (a larger or equal replacement absorbs the slot without losing players). This is the cost-optimisation counterpart to ejection chains — ejection chains fire for player-count reasons, substitution fires for cost reasons.
 
 The outer loop reruns as long as any phase made progress; it terminates when all four phases return no improvement.
 
