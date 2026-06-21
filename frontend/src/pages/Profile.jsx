@@ -21,7 +21,6 @@ export default function Profile() {
 
   const fetchUserStats = useCallback(async (overrideUser) => {
     try {
-      // Fetch user's matches to calculate stats
       const res = await api.get("/matches");
       const matches = res.data?.data || [];
       const currentUser = overrideUser || user || JSON.parse(localStorage.getItem("user") || "{}");
@@ -57,7 +56,6 @@ export default function Profile() {
 
   const fetchRecentActivity = useCallback(async (overrideUser) => {
     try {
-      // Fetch user's recent activity
       const res = await api.get("/matches");
       const matches = res.data?.data || [];
       const currentUser = overrideUser || user || JSON.parse(localStorage.getItem("user") || "{}");
@@ -77,7 +75,6 @@ export default function Profile() {
         
         console.log("User matches found:", userMatches.length);
         
-        // Sort by creation date (newest first) and take last 3
         const recent = userMatches
           .sort((a, b) => {
             const dateA = new Date(a.createdAt || a.datetime || 0);
@@ -107,20 +104,19 @@ export default function Profile() {
       }
     } catch (err) {
       console.error("Failed to fetch recent activity:", err);
-      // Set mock data as fallback
       setRecentActivity([
         {
           id: '1',
           sport: 'Soccer',
           action: 'joined',
-          datetime: new Date(Date.now() - 2 * 60 * 60 * 1000), // 2 hours ago
+          datetime: new Date(Date.now() - 2 * 60 * 60 * 1000),
           location: 'Central Park'
         },
         {
           id: '2', 
           sport: 'Basketball',
           action: 'created',
-          datetime: new Date(Date.now() - 24 * 60 * 60 * 1000), // 1 day ago
+          datetime: new Date(Date.now() - 24 * 60 * 60 * 1000),
           location: 'Sports Complex'
         }
       ]);
@@ -135,7 +131,6 @@ export default function Profile() {
       setName(me?.name || "");
       setAge(me?.age ?? "");
       
-      // Fetch user stats and recent activity
       await fetchUserStats(me);
       await fetchRecentActivity(me);
     } catch (err) {
@@ -154,7 +149,6 @@ export default function Profile() {
     }
   }, [user, fetchUserStats, fetchRecentActivity]);
 
-  // Helper function to format relative time
   const formatRelativeTime = (datetime) => {
     if (!datetime) return 'Unknown time';
     
@@ -213,7 +207,6 @@ export default function Profile() {
   return (
     <div className="min-h-screen bg-background text-foreground">
       <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6 lg:px-8">
-        {/* Header */}
         <div className="mb-8">
           <h1 className="text-3xl font-bold tracking-tight text-foreground">
             My Profile
@@ -224,9 +217,7 @@ export default function Profile() {
         </div>
 
         <div className="grid gap-6 lg:grid-cols-3">
-          {/* Main Profile Info */}
           <div className="lg:col-span-2 space-y-6">
-            {/* Profile Card */}
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -282,7 +273,6 @@ export default function Profile() {
               </CardContent>
             </Card>
 
-            {/* Recent Activity */}
             <Card>
               <CardHeader>
                 <div className="flex items-center justify-between">
@@ -306,7 +296,6 @@ export default function Profile() {
                 <div className="space-y-2">
                   {recentActivity.length > 0 ? (
                     recentActivity.map((activity, index) => {
-                      // Safety check for activity object
                       if (!activity || typeof activity !== 'object') {
                         console.warn('Invalid activity object:', activity);
                         return null;
@@ -342,9 +331,7 @@ export default function Profile() {
             </Card>
           </div>
 
-          {/* Stats Sidebar */}
           <div className="space-y-6">
-            {/* Stats Card */}
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -377,7 +364,6 @@ export default function Profile() {
               </CardContent>
             </Card>
 
-            {/* Quick Actions */}
             <Card>
               <CardHeader>
                 <CardTitle>Quick Actions</CardTitle>

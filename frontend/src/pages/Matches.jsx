@@ -44,7 +44,6 @@ const distanceOptions = [
   { label: "Within 50 km", value: "50" },
 ];
 
-// Sport icon mapping - using only basic Lucide icons that definitely exist
 const sportIcons = {
   "Soccer": Circle,
   "Basketball": Circle,
@@ -281,7 +280,6 @@ export default function MatchesPage() {
     requestLocation();
   }, [distanceFilter, userLocation, locationStatus]);
 
-  // Reverse geocode matches lacking human-readable locations
   useEffect(() => {
     if (!googleReady) return;
     const pending = matches.filter((m) => {
@@ -572,7 +570,6 @@ export default function MatchesPage() {
                 >
                   <CardContent className="p-6">
                     <div onClick={() => navigate(`/matches/${matchId}`)} className="block">
-                      {/* Sport Header */}
                       <div className="flex items-start justify-between mb-4">
                         <div className="flex items-center gap-3">
                           <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
@@ -605,7 +602,6 @@ export default function MatchesPage() {
                         </div>
                       </div>
 
-                      {/* Date & Time */}
                       {match.datetime && (
                         <div className="mb-4">
                           <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -643,7 +639,6 @@ export default function MatchesPage() {
                       )}
                     </div>
 
-                    {/* Join/Leave Button */}
                     <Button
                       onClick={(e) => {
                         e.stopPropagation();

@@ -1,4 +1,3 @@
-// frontend/src/components/Navbar.jsx
 import { Link, useLocation } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { Button } from "./ui/button";
@@ -23,8 +22,6 @@ export default function Navbar() {
       }
       setIsLoggedIn(true);
       
-      // For now, if token exists, consider user logged in
-      // Try to get user data but don't fail if API call fails
       api.get("/auth/me")
         .then((res) => {
           console.log("Auth response:", res.data);
@@ -34,7 +31,6 @@ export default function Navbar() {
         })
         .catch((err) => {
           console.error("Auth check failed:", err);
-          // Set a basic user object if API fails but token exists
           setMe({ name: "User" });
         });
     };
@@ -59,7 +55,6 @@ export default function Navbar() {
     <nav className="sticky top-0 z-50 w-full border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="w-full px-4 sm:px-6 lg:px-8">
         <div className="flex h-16 items-center justify-between">
-          {/* Logo / Brand */}
           <Link to={isLoggedIn ? "/matches" : "/"} className="flex items-center gap-3 group">
             <div className="flex items-center gap-2">
               <div className="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center group-hover:bg-primary/20 transition-colors">
@@ -69,7 +64,6 @@ export default function Navbar() {
             </div>
           </Link>
 
-          {/* Desktop links */}
           <div className="hidden md:flex md:items-center md:gap-6">
             {isLoggedIn ? (
               <>
@@ -123,7 +117,6 @@ export default function Navbar() {
             )}
           </div>
 
-          {/* Mobile toggle */}
           <div className="md:hidden">
             <Button
               onClick={() => setMobileOpen(s => !s)}
@@ -142,7 +135,6 @@ export default function Navbar() {
         </div>
       </div>
 
-      {/* Mobile menu */}
       {mobileOpen && (
         <div className="md:hidden border-t border-border bg-background">
           <div className="px-4 py-4 space-y-2">

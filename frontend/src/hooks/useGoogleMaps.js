@@ -1,10 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { importLibrary, setOptions } from "@googlemaps/js-api-loader";
 
-// Module-scoped promise so Google Maps loads only once.
 let googleLoadPromise = null;
 
-// Loads Google Maps once and exposes lightweight geocoding helpers.
 export default function useGoogleMaps(options = {}) {
   const apiKey =
     options.apiKey || options.key || import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "";
@@ -20,16 +18,13 @@ export default function useGoogleMaps(options = {}) {
 
     if (!googleLoadPromise) {
       googleLoadPromise = (async () => {
-        // Configure loader options first
         setOptions({
           key: apiKey,
           language: options.loader?.language || "en",
-          // Leave region unset by default for worldwide results.
           region: options.loader?.region,
           libraries: ["places"],
           ...options.loader,
         });
-        // Load core and places libraries (ensures geocoder + places)
         await Promise.all([importLibrary("maps"), importLibrary("places")]);
         return window.google;
       })();
@@ -63,7 +58,6 @@ export default function useGoogleMaps(options = {}) {
       country: "",
     };
 
-    // If a parsed object is passed in, normalize and return it.
     if (!Array.isArray(components)) {
       const maybeArray =
         components?.addressComponents ||

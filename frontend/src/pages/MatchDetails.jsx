@@ -25,7 +25,6 @@ export default function MatchDetails() {
   const [actionLoading, setActionLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  /* ---------------- Fetch current user ---------------- */
   useEffect(() => {
     api
       .get("/auth/me")
@@ -33,7 +32,6 @@ export default function MatchDetails() {
       .catch(() => setMe(null));
   }, []);
 
-  /* ---------------- Fetch match ---------------- */
   const fetchMatch = useCallback(async () => {
     try {
       setLoading(true);
@@ -51,7 +49,6 @@ export default function MatchDetails() {
     fetchMatch();
   }, [fetchMatch]);
 
-  /* ---------------- Derived state ---------------- */
   const userJoined =
     me &&
     match?.participants?.some(
@@ -64,7 +61,6 @@ export default function MatchDetails() {
   const isHost=
     me && String(match.host?._id) === String(me._id);
 
-  /* ---------------- Actions ---------------- */
   const handleJoin = async () => {
     setActionLoading(true);
     try {
@@ -130,7 +126,6 @@ export default function MatchDetails() {
       setActionLoading(false);
     }
   }
-  /* ---------------- States ---------------- */
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -152,9 +147,6 @@ export default function MatchDetails() {
     );
   }
 
-
-
-  /* ---------------- UI ---------------- */
   return (
     <div className="min-h-screen bg-background text-foreground">
       <main className="max-w-6xl mx-auto px-4 py-8">
@@ -167,7 +159,6 @@ export default function MatchDetails() {
           Back to Matches
         </Button>
 
-        {/* Header */}
         <div className="mb-8 flex flex-col lg:flex-row lg:justify-between gap-6">
           <div>
             <h1 className="text-3xl font-bold mb-2">
@@ -220,7 +211,6 @@ export default function MatchDetails() {
       Cancel Match
     </Button>
 
-    {/* TEMP placeholders */}
     <Button
       variant="outline"
       onClick={() => {
@@ -243,10 +233,7 @@ export default function MatchDetails() {
   </div>
 )}
 
-
-        {/* Content */}
         <div className="grid gap-6 lg:grid-cols-3">
-          {/* Main */}
           <div className="lg:col-span-2 space-y-6">
             <Card>
               <CardContent className="p-6 space-y-3">
@@ -297,7 +284,6 @@ export default function MatchDetails() {
             )}
           </div>
 
-          {/* Sidebar */}
           <div className="space-y-6">
             <Card>
               <CardContent className="p-6">

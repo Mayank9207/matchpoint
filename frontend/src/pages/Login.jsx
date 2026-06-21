@@ -10,7 +10,6 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const navigate = useNavigate();
 
-  // Redirect if already logged in
   useEffect(() => {
     const token = localStorage.getItem("access_token");
     if (token) {
@@ -29,7 +28,6 @@ export default function Login() {
 
       if (token) {
         localStorage.setItem("access_token", token);
-        // Store user data in localStorage
         if (userData) {
           localStorage.setItem("user", JSON.stringify(userData));
           console.log("Stored user data:", userData);
