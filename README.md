@@ -1,7 +1,7 @@
 # MatchPoint
 
 MatchPoint groups players into squads and assigns those squads to nearby venues in
-real time. The interesting part isn't the CRUD — it's the assignment: given a pool
+real time. The interesting part isn't the CRUD, it's the assignment: given a pool
 of squads and a set of capacity-limited venues, decide who plays where so that the
 most people get matched, at the lowest total travel and skill mismatch. That's a
 constrained optimisation problem, and it lives in `engine/`.
