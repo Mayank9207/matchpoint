@@ -1,89 +1,143 @@
-# 📍 MatchPoint
+# MatchPoint
 
-> A dynamic, geospatial matchmaking web application built to connect players and people based on real-world location and shared interests.
+MatchPoint groups players into squads and assigns those squads to nearby venues in
+real time. The interesting part isn't the CRUD — it's the assignment: given a pool
+of squads and a set of capacity-limited venues, decide who plays where so that the
+most people get matched, at the lowest total travel and skill mismatch. That's a
+constrained optimisation problem, and it lives in `engine/`.
 
-[![Live Demo](https://img.shields.io/badge/Live-Demo-brightgreen.svg)](#) [![MERN Stack](https://img.shields.io/badge/Stack-MERN-blue.svg)](#)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](#)
+![MatchPoint](./images/Screenshot%20%28603%29.png)
 
-![My Screenshot](./images/Screenshot%20%28603%29.png)
+## Layout
 
----
+| Path             | What it is                                                              |
+| ---------------- | ---------------------------------------------------------------------- |
+| `frontend/`      | React + Vite single-page app (deploys to Vercel)                       |
+| `engine/backend/`| FastAPI service — the HTTP API and matchmaking worker (deploys to Railway) |
+| `engine/`        | The matching library: Python model/scoring/solver plus a C++ solver    |
 
-## 🚀 Features
+The backend imports the engine directly (it adds `engine/` to `sys.path` and loads
+the compiled `solver_cpp` extension), so the two are deployed together with `engine/`
+as the build context. The frontend talks to the backend over HTTP and never touches
+the engine.
 
-* **🌍 Geospatial Matchmaking:** Connects users based on real-world proximity using location data and the Google Maps API.
-* **🔐 Secure Authentication:** Robust user registration and login system utilizing JSON Web Tokens (JWT) and encrypted passwords.
-* **⚡ Blazing Fast Frontend:** Built with React and Vite for an incredibly responsive, single-page application experience.
-* **📱 Fully Responsive:** Styled with modern Tailwind CSS to look pixel-perfect on mobile, tablet, and desktop displays.
-* **🛡️ Bulletproof API:** Express.js backend fortified with custom CORS handling and global error middleware.
+## How it fits together
 
-## 💻 Tech Stack
+```
+React SPA ──HTTP──▶ FastAPI ──▶ matching engine (Python + C++ solver)
+                       │
+                       └──▶ MongoDB (users, squads, rooms, matches)
+```
 
-**Frontend:**
-* React 19 (via Vite)
-* Tailwind CSS
-* React Router DOM
-* Axios
+A user authenticates (email OTP or Google), joins or creates a squad, and enters the
+pool. A background worker batches pooled squads and runs the solver against available
+rooms; when it finds an assignment it proposes a match, the squads confirm, and the
+match locks.
 
-**Backend:**
-* Node.js & Express.js
-* MongoDB (Mongoose)
-* JWT for Authentication
-* CORS & Cookie-Parser
+## Running locally
 
-**Deployment:**
-* Frontend: [Vercel](https://vercel.com)
-* Backend: [Render](https://render.com)
-* Database: MongoDB Atlas
+You need Python 3.10, Node 18+, and a MongoDB connection string (Atlas or local).
 
----
+### Backend
 
-## ⚙️ Matching Engine (`engine/`)
+```bash
+cd engine/backend
+pip install -r requirements.txt
+uvicorn app.main:app --reload --port 8000
+```
 
-The matching engine is a pure-Python library that assigns squads to rooms. It runs independently of the Node backend and has no network or database dependencies.
+Create `engine/backend/.env` (see `app/config.py` for every setting):
 
-### What it solves
+```
+MONGODB_URI=<mongodb connection string>
+JWT_SECRET=<long random string>
+CORS_ORIGINS=http://localhost:5173
+GOOGLE_CLIENT_ID=<oauth client id>          # Google login
+SMTP_HOST=...  SMTP_USER=...  SMTP_PASSWORD=...  SMTP_FROM=...   # email OTP
+```
 
-Each squad needs a room that matches its sport, fits within its travel radius, and falls inside its available time window. Rooms have fixed capacity. The goal is to maximise matched players, then minimise total cost (weighted distance + skill-tier gap) among all maximum-matching assignments.
+Matchmaking solves squads against `db.rooms`, so seed some venues once or nothing
+will ever match:
 
-This is a capacity-coupled assignment problem. Greedy assignment fails because a flexible squad making a locally optimal choice can consume capacity that a more constrained squad needs far more — the cost of that early mistake only becomes visible later. The engine uses OR-Tools CP-SAT for the oracle (correctness reference) and a multistart heuristic for the production path.
+```bash
+python seed_rooms.py --lat <city-lat> --lon <city-lon>
+```
 
-### Heuristic design
+### Frontend
 
-The heuristic runs three deterministic starting orderings (size-descending, least-flexible-first, cost-ascending) through FFD construction, then applies an interleaved local search:
+```bash
+cd frontend
+npm install
+npm run dev        # http://localhost:5173
+```
+
+Create `frontend/.env` (template in `.env.example`):
+
+```
+VITE_API_URL=http://localhost:8000
+VITE_GOOGLE_MAPS_API_KEY=<key>
+VITE_GOOGLE_CLIENT_ID=<oauth client id>
+```
+
+The client calls `VITE_API_URL` directly — no path prefix, no dev proxy. The
+backend's `CORS_ORIGINS` must include the frontend origin.
+
+### Engine tests
+
+```bash
+cd engine
+python -m pytest
+```
+
+## The matching engine
+
+Each squad needs a room that matches its sport, fits within its travel radius, and
+falls inside its time window. Rooms have fixed capacity. The objective is to maximise
+matched players first, then minimise total cost (weighted distance + skill-tier gap)
+across all maximum-matching assignments.
+
+This is a capacity-coupled assignment problem, and greedy assignment is not good
+enough: a flexible squad taking its locally cheapest room can consume capacity that a
+more constrained squad needed far more, and the cost of that mistake only surfaces
+later. The engine uses OR-Tools CP-SAT as a correctness oracle and a multistart
+heuristic on the production path.
+
+### Heuristic
+
+Three deterministic starting orderings (size-descending, least-flexible-first,
+cost-ascending) feed an FFD construction, followed by interleaved local search:
 
 - **1-opt relocate** — move a squad to a cheaper room with spare capacity
-- **2-opt pairwise swap** — swap two squads between rooms if combined cost drops
-- **Ejection chains** — evict a placed squad to make room for an unplaced one (player-count move)
-- **Substitution** — replace an expensive placed squad with a cheaper unplaced one of equal or larger size (cost move; `size(U) ≥ size(P)` guards player count)
+- **2-opt swap** — swap two squads between rooms when combined cost drops
+- **Ejection chains** — evict a placed squad to seat an unplaced one (player-count move)
+- **Substitution** — replace an expensive placed squad with a cheaper unplaced one of
+  equal or greater size (cost move; `size(U) ≥ size(P)` guards player count)
 
-### Benchmark results
+The hot path is reimplemented in C++ (`engine/cpp/`, built with CMake + pybind11) and
+exposed to Python as `solver_cpp`.
 
-Tested against the CP-SAT oracle across 15 configurations (5–30 squads, ratio 0.6–2.0):
+### Benchmarks
 
-- **13 / 15 configurations within 5% of optimal cost**, player count matching oracle exactly on all 15
-- 2 known hard cases (`xfail`, documented in `engine/DESIGN.md`):
-  - `tight_20` (20 squads, 5 rooms, ratio 1.0) — 11.5% gap; full rooms block all 2-opt swaps between unequal-size squads, requires 3-opt rotations
-  - `undersupplied_20` (20 squads, 4 rooms, ratio 0.6) — 26.3% gap; oracle evicts several small high-cost squads in a compound move, requires multi-squad substitution
+Against the CP-SAT oracle across 15 configurations (5–30 squads, ratio 0.6–2.0):
+
+- 13/15 within 5% of optimal cost; player count matches the oracle on all 15.
+- Two known hard cases (`xfail`, documented in `engine/DESIGN.md`): `tight_20`
+  (full rooms block 2-opt swaps between unequal-size squads — needs 3-opt rotations)
+  and `undersupplied_20` (oracle wins via a compound multi-squad eviction).
 
 ```bash
 cd engine
 python -m pytest test_solver_vs_oracle.py -v
-# 13 passed, 2 xfailed
 ```
 
----
+## Deployment
 
-## 🛠️ Local Installation & Setup
+**Backend → Railway.** Set the service Root Directory to `engine` so the Docker build
+context includes the engine sources and the C++ solver compiles. Configure the same
+environment variables as local plus the production `CORS_ORIGINS`. Full notes,
+including how to split the worker into its own process, are in
+`engine/backend/DEPLOY.md`.
 
-Follow these steps to get MatchPoint running on your local machine.
-
-### Prerequisites
-* Node.js (v18+)
-* MongoDB Atlas Account (or local MongoDB installation)
-* Git
-
-### 1. Clone the repository
-```bash
-git clone [https://github.com/Mayank9207/matchpoint.git](https://github.com/Mayank9207/matchpoint.git)
-cd matchpoint
+**Frontend → Vercel.** Root Directory `frontend`, build command `npm run build`. Set
+`VITE_API_URL` to the Railway URL and the Google keys. Add the Vercel origin to the
+backend's `CORS_ORIGINS` and to the Google OAuth client's authorised origins.
