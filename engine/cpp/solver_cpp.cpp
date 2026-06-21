@@ -7,6 +7,9 @@
 #include <utility>
 #include <algorithm>
 #include <limits>
+#include <optional>
+#include <numeric>
+#include <tuple>
 
 
 static void ffd_assign(
