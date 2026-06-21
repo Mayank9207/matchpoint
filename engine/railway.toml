@@ -1,4 +1,9 @@
-# Railway deployment configuration for the MatchPoint FastAPI backend.
+# Railway deployment for the MatchPoint FastAPI backend.
+#
+# Set the service Root Directory to "engine" in the Railway dashboard so this
+# file is picked up and the Docker build context is engine/ (the solver bridge
+# needs engine/models.py + engine/cpp at build/runtime).
+#
 # Docs: https://docs.railway.app/reference/config-as-code
 
 [build]

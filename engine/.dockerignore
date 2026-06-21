@@ -1,0 +1,20 @@
+# Stale C++ build (rebuilt inside the image for the runtime's Python).
+cpp/build/
+
+# Virtualenvs
+.venv/
+backend/.venv/
+
+# Secrets / local env
+backend/.env
+.env
+
+# Python caches and tests
+**/__pycache__/
+**/*.pyc
+backend/tests/
+test_*.py
+
+# VCS / tooling
+.git/
+.gitignore

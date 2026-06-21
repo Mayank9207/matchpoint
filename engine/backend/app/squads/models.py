@@ -1,14 +1,15 @@
-"""Pydantic schemas for the squads domain."""
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Annotated, List
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
+from pydantic.functional_validators import BeforeValidator
+
+PyObjectId = Annotated[str, BeforeValidator(str)]
 
 
 class SquadMember(BaseModel):
-    """A single member of a squad."""
-
     user_id: str
     display_name: str
     is_leader: bool = False
@@ -16,34 +17,44 @@ class SquadMember(BaseModel):
 
 
 class SquadCreate(BaseModel):
-    """Request body for POST /squads/create."""
-
-    sport: int = Field(description="Sport enum value (see engine.models.Sport)")
-    tier: int = Field(description="Tier enum value (see engine.models.Tier)")
+    sport: int
+    tier: int
     lat: float
     lon: float
-    max_distance: float = Field(gt=0, description="Max travel distance in metres")
-    start_time: float = Field(description="Earliest acceptable start (epoch seconds)")
-    end_time: float = Field(description="Latest acceptable end (epoch seconds)")
+    max_distance: float = Field(gt=0)
+    start_time: float
+    end_time: float
+    capacity: int = Field(ge=2, le=22)
+    format: str = Field(min_length=1, max_length=12)
+    overs: str | None = Field(default=None, max_length=8)
+    paid: bool = False
+    price: int = Field(default=0, ge=0, le=100000)
 
 
 class SquadJoin(BaseModel):
-    """Request body for POST /squads/join."""
-
-    code: str = Field(min_length=4, max_length=12, description="Shareable squad code")
+    code: str = Field(min_length=4, max_length=12)
 
 
 class SquadResponse(BaseModel):
-    """Public representation of a squad."""
-
-    id: str
+    id: PyObjectId = Field(validation_alias="_id")
     code: str
     sport: int
     tier: int
     lat: float
     lon: float
-    max_distance: float
-    start_time: float
-    end_time: float
-    members: list[SquadMember]
+    max_distance: int
+    start_time: datetime
+    end_time: datetime
+    members: List[SquadMember]
+    status: str
     created_at: datetime
+    region_id: str | None = None
+    queued_at: datetime | None = None
+    match_id: str | None = None
+    capacity: int | None = None
+    format: str | None = None
+    overs: str | None = None
+    paid: bool = False
+    price: int = 0
+
+    model_config = ConfigDict(populate_by_name=True)

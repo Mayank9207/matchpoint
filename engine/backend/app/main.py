@@ -1,6 +1,6 @@
-"""FastAPI application instance: CORS setup and router registration."""
 from __future__ import annotations
 
+import asyncio
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -11,19 +11,28 @@ from app.config import get_settings
 from app.database import close_mongo_connection, connect_to_mongo
 from app.matches.routes import router as matches_router
 from app.squads.routes import router as squads_router
+from app.worker import run_worker_loop
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Open the MongoDB connection on startup, close it on shutdown."""
-    # TODO: implement
     await connect_to_mongo()
-    yield
-    await close_mongo_connection()
+    worker_task = None
+    if get_settings().enable_worker:
+        worker_task = asyncio.create_task(run_worker_loop())
+    try:
+        yield
+    finally:
+        if worker_task is not None:
+            worker_task.cancel()
+            try:
+                await worker_task
+            except asyncio.CancelledError:
+                pass
+        await close_mongo_connection()
 
 
 def create_app() -> FastAPI:
-    """Build and configure the FastAPI application."""
     settings = get_settings()
 
     app = FastAPI(
@@ -52,6 +61,4 @@ app = create_app()
 
 @app.get("/health", tags=["health"])
 async def health() -> dict[str, str]:
-    """Liveness probe used by Railway and load balancers."""
-    # TODO: implement
     return {"status": "ok"}

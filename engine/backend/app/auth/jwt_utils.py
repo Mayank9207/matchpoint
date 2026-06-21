@@ -1,4 +1,3 @@
-"""JWT encoding/decoding and password hashing helpers."""
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
