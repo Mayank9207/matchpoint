@@ -6,7 +6,7 @@ of squads and a set of capacity-limited venues, decide who plays where so that t
 most people get matched, at the lowest total travel and skill mismatch. That's a
 constrained optimisation problem, and it lives in `engine/`.
 
-![MatchPoint](./images/Screenshot%20%28603%29.png)
+![MatchPoint](./Screenshot%20%281318%29.png)
 
 ## Layout
 
