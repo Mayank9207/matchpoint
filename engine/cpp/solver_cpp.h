@@ -6,7 +6,7 @@
 
 #include "types.h"
 
-// Public entry point — defined in solver_cpp.cpp, called from bindings.cpp.
+// Public entry point : defined in solver_cpp.cpp, called from bindings.cpp.
 // Returns (assignment, total_cost), assignment keyed by squad index.
 std::pair<std::map<int, int>, double> solve_heuristic_cpp(
     const std::vector<Squad>& squads,
