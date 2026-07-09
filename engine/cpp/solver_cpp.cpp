@@ -141,10 +141,9 @@ static bool swap_move(
 }
 
 
-// Ejection chain (single-step): evict a placed squad P from room R so that an
+// Ejection chain: it is single step, evict a placed squad P from room R so that an
 // unplaced squad U can take R; relocate P to another feasible room with headroom.
-// Accept if the chain nets more players matched (player count beats cost — matches
-// the oracle's lex priority).
+
 static bool ejection_chain_move(
     const std::vector<Squad>& squads,
     const std::vector<Room>& rooms,
@@ -163,7 +162,7 @@ static bool ejection_chain_move(
     }
 
     std::stable_sort(unplaced.begin(), unplaced.end(),[&](int a, int b) { return squads[a].size > squads[b].size; }); 
-    //fix brackets please
+
 
     for(int u_idx=0; u_idx<unplaced.size(); u_idx++){
 
@@ -199,7 +198,7 @@ static bool ejection_chain_move(
             if(!is_feasible(s,r))continue;
 
             int needed = room_load[j] + s.size - r.capacity;
-            if(needed <= 0)continue; //would have been caught by subphase A
+            if(needed <= 0)continue; 
 
             //find candidates for eviction
             for(const auto& [p_idx, p_room] : assignment){
@@ -244,9 +243,7 @@ static bool ejection_chain_move(
 }
 
 
-// Substitution: replace placed squad P with unplaced squad U, where
-// score(U) < score(P) AND size(U) >= size(P). The size guard is a CORRECTNESS
-// INVARIANT — removing it drops player count on undersupplied instances.
+// Substitution: replace placed squad P with unplaced squad U
 static bool substitution_move(
     const std::vector<Squad>& squads,
     const std::vector<Room>& rooms,
@@ -276,8 +273,8 @@ static bool substitution_move(
                 const Squad& p = squads[p_idx];
                 const Room& r = rooms[r_idx];
 
-                if(u.size < p.size)continue; //size guard
-                if(!is_feasible(u,r))continue; //feasibility guard
+                if(u.size < p.size)continue; 
+                if(!is_feasible(u,r))continue; 
 
                 double delta = score(p,r,w_dist,w_tier) - score(u,r,w_dist,w_tier);
 
@@ -305,8 +302,7 @@ static bool substitution_move(
 }
 
 
-// Run all four move types in a fixed order until no move improves the solution.
-// Terminates because each move strictly improves a bounded objective.
+// Run all four move types in a fixed order until no move improves score
 static void local_search(
     const std::vector<Squad>& squads,
     const std::vector<Room>& rooms,
@@ -334,8 +330,7 @@ static void local_search(
 }
 
 
-// Compute total assignment cost. Walk assignment in key order (std::map gives
-// sorted-by-key iteration, matching a canonical squad-index order).
+// Compute total assignment cost. Walk assignment in key order 
 static double total_cost(
     const std::vector<Squad>& squads,
     const std::vector<Room>& rooms,
@@ -355,9 +350,6 @@ static double total_cost(
 }
 
 
-// ============================================================
-//  Public entry point — called from bindings.cpp
-// ============================================================
 
 std::pair<std::map<int,int>, double> solve_heuristic_cpp(
     const std::vector<Squad>& squads,
