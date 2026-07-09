@@ -5,11 +5,7 @@
 #include <cstdlib>
 
 inline double haversine_m(const Squad& s, const Room& r) {
-    constexpr double EARTH_R = 6371000.0;  // metres
-    // Mirror Python's utils.haversine_m bit-for-bit: convert each coordinate
-    // to radians first (x * (pi/180)), then take differences of the radian
-    // values — NOT radians(lat2 - lat1).  Matching the operation order keeps
-    // the result byte-identical with CPython's math.radians.
+    constexpr double EARTH_R = 6371000.0;  
     constexpr double DEG2RAD = M_PI / 180.0;
 
     double rlat1 = s.lat * DEG2RAD;
