@@ -1,0 +1,1 @@
+/usr/bin/c++ -fPIC -O3 -DNDEBUG -march=native -shared -flto=auto -Wl,--dependency-file=CMakeFiles/solver_cpp.dir/link.d  -o solver_cpp.cpython-314-x86_64-linux-gnu.so CMakeFiles/solver_cpp.dir/bindings.cpp.o CMakeFiles/solver_cpp.dir/solver_cpp.cpp.o

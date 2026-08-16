@@ -103,9 +103,6 @@ async def verify_otp_route(
     if not user:
         raise HTTPException(status_code=404, detail="Account not found")
 
-    if user.get("is_verified", True) and not user.get("otp_hash"):
-        return _token_response(user)
-
     otp_hash = user.get("otp_hash")
     expires_at = user.get("otp_expires_at")
     if not otp_hash or not expires_at:
