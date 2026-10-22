@@ -59,7 +59,7 @@ CONFIGS = [
 # Weights used for both solvers; must be identical so outputs are comparable.
 _W_DIST = 0.7
 _W_TIER = 0.3   # NOTE: solve_heuristic uses w_tier, NOT w_skill (oracle differs)
-_MAX_ITER = 100
+_MAX_ITER = 100 
 
 
 @pytest.mark.parametrize("n_squads,n_rooms,contention_ratio,seed", CONFIGS)
