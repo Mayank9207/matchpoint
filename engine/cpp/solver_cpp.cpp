@@ -59,27 +59,40 @@ static bool relocate_move(
     std::vector<int>& room_load
 ) {
     //so we have to brute force 
-    //we go over each placed squad, stored in form of assignment 
+    //we go over each placed squad, stored in form of assignment
+    //Bug fix: The bindings here, [s_idx, r_idx] are actually not independent copies but reference to the map pairs 
+    //So any change we are making acutlly has effect on the future so we can't just keep updating it like that so we need independent state 
+    //variables and correct updation order 
+
     bool relocated = false;
 
     for(const auto& [s_idx, r_idx] : assignment){
+
+      int current_r_idx = r_idx;
+      
         const Squad& s = squads[s_idx];
         const Room& current_room = rooms[r_idx];
         double current_score = score(s,current_room,w_dist,w_tier);
 
         for(int new_r_idx=0; new_r_idx<rooms.size(); new_r_idx++){
-            if(new_r_idx == r_idx)continue;
+            if(new_r_idx == current_r_idx)continue;
 
             const Room& new_room = rooms[new_r_idx];
             if(is_feasible(s,new_room) && room_load[new_r_idx]+s.size <= new_room.capacity){
                 double new_score = score(s,new_room,w_dist,w_tier);
 
                 if(new_score < current_score){
+
+
                    
                     assignment[s_idx] = new_r_idx;
-                    room_load[r_idx] -= s.size;
+                    room_load[current_r_idx] -= s.size;
                     room_load[new_r_idx] += s.size;
+
+                    current_r_idx = new_r_idx;
                     relocated = true;
+
+                    current_score = new_score;
                     
                 }
             }
@@ -274,7 +287,12 @@ static bool substitution_move(
                 const Room& r = rooms[r_idx];
 
                 if(u.size < p.size)continue; 
-                if(!is_feasible(u,r))continue; 
+                if(!is_feasible(u,r))continue;
+
+                long long new_load =
+                static_cast<long long>(room_load[r_idx]) - p.size + u.size;
+
+                if (new_load > r.capacity) continue;
 
                 double delta = score(p,r,w_dist,w_tier) - score(u,r,w_dist,w_tier);
 
