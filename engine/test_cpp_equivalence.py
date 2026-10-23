@@ -52,6 +52,11 @@ CONFIGS = [
     pytest.param(12, 5,  1.3, 208, id="mid_contention_small"),
     pytest.param(25, 8,  1.2, 209, id="mid_contention_large"),
 
+    # Regression cases found by the differential sweep.
+    pytest.param(8,  4, 1.0, 305, id="regression_flex_tiebreak_players"),
+    pytest.param(8,  4, 2.0, 300, id="regression_map_key_order"),
+    pytest.param(10, 4, 0.6, 302, id="regression_undersupplied_flex"),
+
     # Edge case — empty instance, both solvers must return ({}, 0.0)
     pytest.param(0,  0,  1.0, 210, id="empty"),
 ]
