@@ -14,12 +14,18 @@
 #include "ordered_assign.h"
 
 
+struct Tables {
+    int R;
+    std::vector<char> feasible;
+    std::vector<double> cost;
+};
+
+
 static void ffd_assign(
     const std::vector<Squad>& squads,
     const std::vector<Room>& rooms,
     const std::vector<int>& order,
-    double w_dist,
-    double w_tier,
+    const Tables& tables,
     OrderedAssign& assignment,
     std::vector<int>& room_load
 ) {
@@ -33,8 +39,8 @@ static void ffd_assign(
         for(int r_idx=0;r_idx<rooms.size();r_idx++){
             const Room& r= rooms[r_idx];
 
-            if(is_feasible(s,r) && room_load[r_idx]+s.size <= r.capacity){
-                double s_score = score(s,r,w_dist,w_tier);
+            if(tables.feasible[idx * tables.R + r_idx] && room_load[r_idx]+s.size <= r.capacity){
+                double s_score = tables.cost[idx * tables.R + r_idx];
                 if(s_score < best_score){
                     best_score = s_score;
                     best_room = r_idx;
@@ -55,8 +61,7 @@ static void ffd_assign(
 static bool relocate_move(
     const std::vector<Squad>& squads,
     const std::vector<Room>& rooms,
-    double w_dist,
-    double w_tier,
+    const Tables& tables,
     OrderedAssign& assignment,
     std::vector<int>& room_load
 ) {
@@ -73,15 +78,14 @@ static bool relocate_move(
         int current_r_idx = r_idx;
       
         const Squad& s = squads[s_idx];
-        const Room& current_room = rooms[r_idx];
-        double current_score = score(s,current_room,w_dist,w_tier);
+        double current_score = tables.cost[s_idx * tables.R + r_idx];
 
         for(int new_r_idx=0; new_r_idx<rooms.size(); new_r_idx++){
             if(new_r_idx == current_r_idx)continue;
 
             const Room& new_room = rooms[new_r_idx];
-            if(is_feasible(s,new_room) && room_load[new_r_idx]+s.size <= new_room.capacity){
-                double new_score = score(s,new_room,w_dist,w_tier);
+            if(tables.feasible[s_idx * tables.R + new_r_idx] && room_load[new_r_idx]+s.size <= new_room.capacity){
+                double new_score = tables.cost[s_idx * tables.R + new_r_idx];
 
                 if(new_score < current_score){
 
@@ -109,8 +113,7 @@ static bool relocate_move(
 static bool swap_move(
     const std::vector<Squad>& squads,
     const std::vector<Room>& rooms,
-    double w_dist,
-    double w_tier,
+    const Tables& tables,
     OrderedAssign& assignment,
     std::vector<int>& room_load
 ) {
@@ -129,13 +132,13 @@ static bool swap_move(
             const Room& r1 = rooms[r1_idx];
             const Room& r2 = rooms[r2_idx];
 
-            if(!is_feasible(s1,r2) || !is_feasible(s2,r1))continue;
+            if(!tables.feasible[s1_idx * tables.R + r2_idx] || !tables.feasible[s2_idx * tables.R + r1_idx])continue;
             //also check headroom
             if(room_load[r1_idx] - s1.size + s2.size > r1.capacity)continue;
             if(room_load[r2_idx] - s2.size + s1.size > r2.capacity)continue;
 
-            double current_score = score(s1,r1,w_dist,w_tier) + score(s2,r2,w_dist,w_tier);
-            double new_score = score(s1,r2,w_dist,w_tier) + score(s2,r1,w_dist,w_tier);
+            double current_score = tables.cost[s1_idx * tables.R + r1_idx] + tables.cost[s2_idx * tables.R + r2_idx];
+            double new_score = tables.cost[s1_idx * tables.R + r2_idx] + tables.cost[s2_idx * tables.R + r1_idx];
 
             if(new_score < current_score){
                 //perform swap
@@ -162,8 +165,7 @@ static bool swap_move(
 static bool ejection_chain_move(
     const std::vector<Squad>& squads,
     const std::vector<Room>& rooms,
-    double w_dist,
-    double w_tier,
+    const Tables& tables,
     OrderedAssign& assignment,
     std::vector<int>& room_load
 ){
@@ -188,8 +190,8 @@ static bool ejection_chain_move(
         //subphase A: try to directly place u
         for(int r_idx=0; r_idx<rooms.size(); r_idx++){
             const Room& r = rooms[r_idx];
-            if(is_feasible(s,r) && room_load[r_idx] + s.size <= r.capacity){
-                double s_score = score(s,r,w_dist,w_tier);
+            if(tables.feasible[unplaced[u_idx] * tables.R + r_idx] && room_load[r_idx] + s.size <= r.capacity){
+                double s_score = tables.cost[unplaced[u_idx] * tables.R + r_idx];
                 if(s_score < best_score){
                     best_score = s_score;
                     best_room = r_idx;
@@ -210,7 +212,7 @@ static bool ejection_chain_move(
 
         for(int j=0; j<rooms.size(); j++){
             const Room& r = rooms[j];
-            if(!is_feasible(s,r))continue;
+            if(!tables.feasible[unplaced[u_idx] * tables.R + j])continue;
 
             int needed = room_load[j] + s.size - r.capacity;
             if(needed <= 0)continue; 
@@ -226,10 +228,10 @@ static bool ejection_chain_move(
                 for(int k=0; k<rooms.size(); k++){
                     if(k == j)continue;
                     const Room& r_k = rooms[k];
-                    if(!is_feasible(p,r_k))continue;
+                    if(!tables.feasible[p_idx * tables.R + k])continue;
                     if(room_load[k] + p.size > r_k.capacity)continue;
 
-                    double delta = score(s,r,w_dist,w_tier) + score(p,r_k,w_dist,w_tier) - score(p,r,w_dist,w_tier);
+                    double delta = tables.cost[unplaced[u_idx] * tables.R + j] + tables.cost[p_idx * tables.R + k] - tables.cost[p_idx * tables.R + j];
                     if(!best_move.has_value() || delta < std::get<0>(best_move.value())){
                         best_move = std::make_tuple(delta, p_idx, j, k);
                     }
@@ -263,8 +265,7 @@ static bool ejection_chain_move(
 static bool substitution_move(
     const std::vector<Squad>& squads,
     const std::vector<Room>& rooms,
-    double w_dist,
-    double w_tier,
+    const Tables& tables,
     OrderedAssign& assignment,
     std::vector<int>& room_load
 ) {
@@ -290,14 +291,14 @@ static bool substitution_move(
                 const Room& r = rooms[r_idx];
 
                 if(u.size < p.size)continue; 
-                if(!is_feasible(u,r))continue;
+                if(!tables.feasible[unplaced[u_idx] * tables.R + r_idx])continue;
 
                 long long new_load =
                 static_cast<long long>(room_load[r_idx]) - p.size + u.size;
 
                 if (new_load > r.capacity) continue;
 
-                double delta = score(p,r,w_dist,w_tier) - score(u,r,w_dist,w_tier);
+                double delta = tables.cost[p_idx * tables.R + r_idx] - tables.cost[unplaced[u_idx] * tables.R + r_idx];
 
                 if (delta > 0) {
                     if (!best_sub.has_value() || delta > std::get<0>(best_sub.value())) {
@@ -327,8 +328,7 @@ static bool substitution_move(
 static void local_search(
     const std::vector<Squad>& squads,
     const std::vector<Room>& rooms,
-    double w_dist,
-    double w_tier,
+    const Tables& tables,
     int max_iter,
     OrderedAssign& assignment,
     std::vector<int>& room_load
@@ -337,13 +337,13 @@ static void local_search(
         
         bool improved = false;
 
-        if(relocate_move(squads, rooms, w_dist, w_tier, assignment, room_load))improved = true;
+        if(relocate_move(squads, rooms, tables, assignment, room_load))improved = true;
         
-        if(swap_move(squads, rooms, w_dist, w_tier, assignment, room_load))improved = true;
+        if(swap_move(squads, rooms, tables, assignment, room_load))improved = true;
         
-        if(ejection_chain_move(squads, rooms, w_dist, w_tier, assignment, room_load))improved = true;
+        if(ejection_chain_move(squads, rooms, tables, assignment, room_load))improved = true;
         
-        if(substitution_move(squads, rooms, w_dist, w_tier, assignment, room_load))improved = true;
+        if(substitution_move(squads, rooms, tables, assignment, room_load))improved = true;
         
 
         if(!improved)break; 
@@ -353,18 +353,13 @@ static void local_search(
 
 // Compute total assignment cost. Walk assignment in insertion order 
 static double total_cost(
-    const std::vector<Squad>& squads,
-    const std::vector<Room>& rooms,
-    const OrderedAssign& assignment,
-    double w_dist,
-    double w_tier
+    const Tables& tables,
+    const OrderedAssign& assignment
 ) {
     double cost = 0.0;
     for (int s_idx : assignment.order) {
         int r_idx = assignment.at(s_idx);
-        const Squad& s = squads[s_idx];
-        const Room& r = rooms[r_idx];
-        cost += score(s,r,w_dist,w_tier);
+        cost += tables.cost[s_idx * tables.R + r_idx];
     }
 
 
@@ -384,16 +379,37 @@ std::pair<std::map<int,int>, double> solve_heuristic_cpp(
     std::vector<int> base_indices(squads.size());
     std::iota(base_indices.begin(), base_indices.end(), 0);
 
+    const int S = static_cast<int>(squads.size());
+    const int R = static_cast<int>(rooms.size());
+
+    Tables tables{
+        R,
+        std::vector<char>(S * R, 0),
+        std::vector<double>(S * R, std::numeric_limits<double>::infinity())
+    };
+
+    for (int i = 0; i < S; ++i) {
+        for (int j = 0; j < R; ++j) {
+            if (is_feasible(squads[i], rooms[j])) {
+                tables.feasible[i * R + j] = 1;
+                tables.cost[i * R + j] = score(squads[i], rooms[j], w_dist, w_tier);
+            }
+        }
+    }
+
     std::vector<int> order_size = base_indices;
 
     std::stable_sort(order_size.begin(), order_size.end(), [&](int a, int b) {
         return squads[a].size > squads[b].size;
     });
 
-    std::vector<int> flex_counts(squads.size(), 0);
-    for (int i = 0; i < squads.size(); ++i) {
-        for (const auto& r : rooms) {
-            if (is_feasible(squads[i], r)) flex_counts[i]++;
+    std::vector<int> flex_counts(S, 0);
+    std::vector<double> min_costs(S, std::numeric_limits<double>::infinity());
+    for (int i = 0; i < S; ++i) {
+        for (int j = 0; j < R; ++j) {
+            if (!tables.feasible[i * R + j]) continue;
+            flex_counts[i]++;
+            min_costs[i] = std::min(min_costs[i], tables.cost[i * R + j]);
         }
     }
     std::vector<int> order_flex = base_indices;
@@ -402,16 +418,6 @@ std::pair<std::map<int,int>, double> solve_heuristic_cpp(
         if(flex_counts[a] != flex_counts[b])return flex_counts[a] < flex_counts[b];
         return squads[a].size > squads[b].size;
     });
-
-    std::vector<double> min_costs(squads.size(), std::numeric_limits<double>::infinity());
-    for (int i = 0; i < squads.size(); ++i) {
-        for (const auto& r : rooms) {
-            if (is_feasible(squads[i], r)) {
-                double c = score(squads[i], r, w_dist, w_tier);
-                if (c < min_costs[i]) min_costs[i] = c;
-            }
-        }
-    }
 
     std::vector<int> order_cost = base_indices;
     std::stable_sort(order_cost.begin(), order_cost.end(), [&](int a, int b) {
@@ -434,10 +440,10 @@ std::pair<std::map<int,int>, double> solve_heuristic_cpp(
         OrderedAssign current_assignment(squads.size());
         std::vector<int> current_load(rooms.size(), 0);
 
-        ffd_assign(squads, rooms, order, w_dist, w_tier, current_assignment, current_load);
+        ffd_assign(squads, rooms, order, tables, current_assignment, current_load);
         
 
-        local_search(squads, rooms, w_dist, w_tier, max_iter, current_assignment, current_load); 
+        local_search(squads, rooms, tables, max_iter, current_assignment, current_load); 
 
         //we need to 
 
@@ -445,7 +451,7 @@ std::pair<std::map<int,int>, double> solve_heuristic_cpp(
         for (int s_idx : current_assignment.order) {
             current_placed += squads[s_idx].size;
         }
-        double current_cost = total_cost(squads, rooms, current_assignment, w_dist, w_tier);
+        double current_cost = total_cost(tables, current_assignment);
 
 
         if (current_placed > best_placed_players || 
